@@ -1,0 +1,33 @@
+{
+  "accuracy": 1.0,
+  "r2_score": 0.9968,
+  "feature_names": [
+    "temperature_c",
+    "vibration_g",
+    "rpm",
+    "load_percent",
+    "humidity_percent",
+    "vibration_energy",
+    "thermal_load_index",
+    "speed_ratio",
+    "temp_vibe_interaction"
+  ],
+  "feature_importances": {
+    "temperature_c": 0.3119,
+    "temp_vibe_interaction": 0.285,
+    "vibration_g": 0.1837,
+    "vibration_energy": 0.1253,
+    "thermal_load_index": 0.0542,
+    "speed_ratio": 0.0227,
+    "rpm": 0.016,
+    "load_percent": 0.0012,
+    "humidity_percent": 0.0
+  },
+  "labels": {
+    "Healthy": 0,
+    "Warning": 1,
+    "Fault": 2
+  },
+  "training_samples": 7662,
+  "test_samples": 1916
+}

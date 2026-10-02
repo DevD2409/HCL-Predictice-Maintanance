@@ -1,0 +1,713 @@
+[
+  {
+    "id": "5935bee6efcdf160",
+    "type": "tab",
+    "label": "Flow 1",
+    "disabled": false,
+    "info": "",
+    "env": []
+  },
+  {
+    "id": "4f392e0e3321035d",
+    "type": "sqlitedb",
+    "db": "C:\\Users\\devdw\\OneDrive\\Documents\\HCL-Predictive-Maintenance\\data\\machine_data.db",
+    "mode": "RWC"
+  },
+  {
+    "id": "6fbb50bc97ae5566",
+    "type": "ui-base",
+    "name": "My Dashboard",
+    "path": "/dashboard",
+    "appIcon": "",
+    "includeClientData": true,
+    "acceptsClientConfig": [
+      "ui-notification",
+      "ui-control"
+    ],
+    "showPathInSidebar": false,
+    "headerContent": "page",
+    "navigationStyle": "default",
+    "titleBarStyle": "default",
+    "showReconnectNotification": true,
+    "notificationDisplayTime": 1,
+    "showDisconnectNotification": true,
+    "allowInstall": false
+  },
+  {
+    "id": "b21aeb4d052cde6b",
+    "type": "ui-theme",
+    "name": "Default Theme",
+    "colors": {
+      "surface": "#fcfcfd",
+      "primary": "#0d74ce",
+      "bgPage": "#f9f9fb",
+      "groupBg": "#ffffff",
+      "groupOutline": "#d9d9e0"
+    },
+    "sizes": {
+      "density": "default",
+      "pagePadding": "12px",
+      "groupGap": "12px",
+      "groupBorderRadius": "4px",
+      "widgetGap": "12px"
+    }
+  },
+  {
+    "id": "50f21c1e78fce5cc",
+    "type": "ui-page",
+    "name": "Page 1",
+    "ui": "6fbb50bc97ae5566",
+    "path": "/page1",
+    "icon": "home",
+    "layout": "grid",
+    "theme": "b21aeb4d052cde6b",
+    "breakpoints": [
+      {
+        "name": "Default",
+        "px": 0,
+        "cols": 3
+      },
+      {
+        "name": "Tablet",
+        "px": 576,
+        "cols": 6
+      },
+      {
+        "name": "Small Desktop",
+        "px": 768,
+        "cols": 9
+      },
+      {
+        "name": "Desktop",
+        "px": 1024,
+        "cols": 12
+      }
+    ],
+    "order": 2,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "35304ba2358ba3a1",
+    "type": "ui-group",
+    "name": "Group 1",
+    "page": "50f21c1e78fce5cc",
+    "width": 6,
+    "height": 1,
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "visible": true,
+    "disabled": false,
+    "groupType": "default"
+  },
+  {
+    "id": "20982e0724e0bc58",
+    "type": "ui-page",
+    "name": "Predictive Maintenance",
+    "ui": "6fbb50bc97ae5566",
+    "path": "/predictive-maintenance",
+    "icon": "home",
+    "layout": "grid",
+    "theme": "b21aeb4d052cde6b",
+    "breakpoints": [
+      {
+        "name": "Default",
+        "px": "0",
+        "cols": "3"
+      },
+      {
+        "name": "Tablet",
+        "px": "576",
+        "cols": "6"
+      },
+      {
+        "name": "Small Desktop",
+        "px": "768",
+        "cols": "9"
+      },
+      {
+        "name": "Desktop",
+        "px": "1024",
+        "cols": "12"
+      }
+    ],
+    "order": 1,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "2674ddaa055146bd",
+    "type": "ui-group",
+    "name": "Motor Monitoring",
+    "page": "20982e0724e0bc58",
+    "width": 6,
+    "height": 1,
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false",
+    "groupType": "default"
+  },
+  {
+    "id": "c6777fe404cc5b10",
+    "type": "inject",
+    "z": "5935bee6efcdf160",
+    "name": "Test Query",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "2",
+    "crontab": "",
+    "once": true,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 110,
+    "y": 40,
+    "wires": [
+      [
+        "508a296f9b2a8669"
+      ]
+    ]
+  },
+  {
+    "id": "508a296f9b2a8669",
+    "type": "function",
+    "z": "5935bee6efcdf160",
+    "name": "Latest 5 Readings",
+    "func": "msg.topic = `\nSELECT\n    id,\n    timestamp,\n    machine_id,\n    temperature_c,\n    humidity_percent,\n    vibration_g,\n    rpm,\n    load_percent,\n    condition\nFROM machine_readings\nORDER BY id DESC\nLIMIT 5\n`;\n\nreturn msg;",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 330,
+    "y": 40,
+    "wires": [
+      [
+        "e2bcfe64f3574adc"
+      ]
+    ]
+  },
+  {
+    "id": "e2bcfe64f3574adc",
+    "type": "sqlite",
+    "z": "5935bee6efcdf160",
+    "mydb": "4f392e0e3321035d",
+    "sqlquery": "msg.topic",
+    "sql": "",
+    "name": "Machine Database",
+    "x": 590,
+    "y": 40,
+    "wires": [
+      [
+        "e65975b2884d305e"
+      ]
+    ]
+  },
+  {
+    "id": "9e9f89690922d2b1",
+    "type": "debug",
+    "z": "5935bee6efcdf160",
+    "name": "SQLite Output",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 880,
+    "y": 120,
+    "wires": []
+  },
+  {
+    "id": "e65975b2884d305e",
+    "type": "function",
+    "z": "5935bee6efcdf160",
+    "name": "Process Machine Status",
+    "func": "if (!msg.payload || msg.payload.length === 0) {\n    node.status({\n        fill: \"grey\",\n        shape: \"ring\",\n        text: \"No machine data\"\n    });\n\n    return null;\n}\n\nconst latest = msg.payload[0];\n\nmsg.machine = latest;\n\nif (latest.condition === \"Healthy\") {\n\n    node.status({\n        fill: \"green\",\n        shape: \"dot\",\n        text: \"Healthy\"\n    });\n\n}\nelse if (latest.condition === \"Warning\") {\n\n    node.status({\n        fill: \"yellow\",\n        shape: \"dot\",\n        text: \"Warning\"\n    });\n\n}\nelse if (latest.condition === \"Fault\") {\n\n    node.status({\n        fill: \"red\",\n        shape: \"dot\",\n        text: \"Fault\"\n    });\n\n}\n\nmsg.payload = latest;\n\nreturn msg;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 850,
+    "y": 40,
+    "wires": [
+      [
+        "e87a905d55a96b0c",
+        "9e9f89690922d2b1"
+      ]
+    ]
+  },
+  {
+    "id": "e87a905d55a96b0c",
+    "type": "function",
+    "z": "5935bee6efcdf160",
+    "name": "Prepare Dashboard Data",
+    "func": "const d = msg.payload;\n\nreturn [\n    { payload: d.temperature_c, topic: \"Temperature\" },\n    { payload: d.vibration_g, topic: \"Vibration\" },\n    { payload: d.rpm, topic: \"RPM\" },\n    { payload: d.humidity_percent, topic: \"Humidity\" },\n    { payload: d.load_percent, topic: \"Load\" },\n    { payload: d.condition, topic: \"Condition\" }\n];",
+    "outputs": 6,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 150,
+    "y": 140,
+    "wires": [
+      [
+        "b05d3ca56c400626",
+        "0f348852b1aa85a9"
+      ],
+      [
+        "7233c05d1b3b42f8",
+        "a6dd9cfb7a64cae7"
+      ],
+      [
+        "1cccb05ab3f49d7d"
+      ],
+      [
+        "ee87428e8cb7df2c"
+      ],
+      [
+        "6598caba4304c17c"
+      ],
+      [
+        "69011b787448b270"
+      ]
+    ]
+  },
+  {
+    "id": "1cccb05ab3f49d7d",
+    "type": "ui-gauge",
+    "z": "5935bee6efcdf160",
+    "name": "RPM",
+    "group": "2674ddaa055146bd",
+    "order": 2,
+    "value": "payload",
+    "valueType": "msg",
+    "width": 3,
+    "height": 3,
+    "gtype": "gauge-half",
+    "gstyle": "needle",
+    "title": "gauge",
+    "alwaysShowTitle": false,
+    "floatingTitlePosition": "top-left",
+    "units": "RPM",
+    "icon": "",
+    "prefix": "",
+    "suffix": "",
+    "segments": [
+      {
+        "from": "1000",
+        "color": "#ea5353",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "1350",
+        "color": "#ffc800",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "1420",
+        "color": "#5cd65c",
+        "text": "",
+        "textType": "label"
+      }
+    ],
+    "min": 1000,
+    "max": 1600,
+    "sizeThickness": 16,
+    "sizeGap": 4,
+    "sizeKeyThickness": 8,
+    "styleRounded": true,
+    "styleGlow": false,
+    "className": "",
+    "x": 450,
+    "y": 280,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "ee87428e8cb7df2c",
+    "type": "ui-gauge",
+    "z": "5935bee6efcdf160",
+    "name": "Humidity",
+    "group": "2674ddaa055146bd",
+    "order": 6,
+    "value": "payload",
+    "valueType": "msg",
+    "width": 3,
+    "height": 3,
+    "gtype": "gauge-half",
+    "gstyle": "needle",
+    "title": "gauge",
+    "alwaysShowTitle": false,
+    "floatingTitlePosition": "top-left",
+    "units": "%",
+    "icon": "",
+    "prefix": "",
+    "suffix": "",
+    "segments": [
+      {
+        "from": "0",
+        "color": "#5cd65c",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "60",
+        "color": "#ffc800",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "80",
+        "color": "#ea5353",
+        "text": "",
+        "textType": "label"
+      }
+    ],
+    "min": 0,
+    "max": 100,
+    "sizeThickness": 16,
+    "sizeGap": 4,
+    "sizeKeyThickness": 8,
+    "styleRounded": true,
+    "styleGlow": false,
+    "className": "",
+    "x": 460,
+    "y": 320,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "6598caba4304c17c",
+    "type": "ui-gauge",
+    "z": "5935bee6efcdf160",
+    "name": "Load",
+    "group": "2674ddaa055146bd",
+    "order": 5,
+    "value": "payload",
+    "valueType": "msg",
+    "width": 3,
+    "height": 3,
+    "gtype": "gauge-half",
+    "gstyle": "needle",
+    "title": "gauge",
+    "alwaysShowTitle": false,
+    "floatingTitlePosition": "top-left",
+    "units": "%",
+    "icon": "",
+    "prefix": "",
+    "suffix": "",
+    "segments": [
+      {
+        "from": "0",
+        "color": "#5cd65c",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "60",
+        "color": "#ffc800",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "75",
+        "color": "#ea5353",
+        "text": "",
+        "textType": "label"
+      }
+    ],
+    "min": 0,
+    "max": 100,
+    "sizeThickness": 16,
+    "sizeGap": 4,
+    "sizeKeyThickness": 8,
+    "styleRounded": true,
+    "styleGlow": false,
+    "className": "",
+    "x": 450,
+    "y": 360,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "7233c05d1b3b42f8",
+    "type": "ui-gauge",
+    "z": "5935bee6efcdf160",
+    "name": "Vibration",
+    "group": "2674ddaa055146bd",
+    "order": 4,
+    "value": "payload",
+    "valueType": "msg",
+    "width": 3,
+    "height": 3,
+    "gtype": "gauge-half",
+    "gstyle": "needle",
+    "title": "gauge",
+    "alwaysShowTitle": false,
+    "floatingTitlePosition": "top-left",
+    "units": "g",
+    "icon": "",
+    "prefix": "",
+    "suffix": "",
+    "segments": [
+      {
+        "from": "0",
+        "color": "#5cd65c",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "0.08",
+        "color": "#ffc800",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "0.20",
+        "color": "#ea5353",
+        "text": "",
+        "textType": "label"
+      }
+    ],
+    "min": 0,
+    "max": 0.5,
+    "sizeThickness": 16,
+    "sizeGap": 4,
+    "sizeKeyThickness": 8,
+    "styleRounded": true,
+    "styleGlow": false,
+    "className": "",
+    "x": 460,
+    "y": 200,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "b05d3ca56c400626",
+    "type": "ui-gauge",
+    "z": "5935bee6efcdf160",
+    "name": "Temperature",
+    "group": "2674ddaa055146bd",
+    "order": 3,
+    "value": "payload",
+    "valueType": "msg",
+    "width": 3,
+    "height": 3,
+    "gtype": "gauge-half",
+    "gstyle": "needle",
+    "title": "gauge",
+    "alwaysShowTitle": false,
+    "floatingTitlePosition": "top-left",
+    "units": "\u00b0C",
+    "icon": "",
+    "prefix": "",
+    "suffix": "",
+    "segments": [
+      {
+        "from": "0",
+        "color": "#5cd65c",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "45",
+        "color": "#ffc800",
+        "text": "",
+        "textType": "label"
+      },
+      {
+        "from": "60",
+        "color": "#ea5353",
+        "text": "",
+        "textType": "label"
+      }
+    ],
+    "min": 0,
+    "max": 100,
+    "sizeThickness": 16,
+    "sizeGap": 4,
+    "sizeKeyThickness": 8,
+    "styleRounded": true,
+    "styleGlow": false,
+    "className": "",
+    "x": 470,
+    "y": 120,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "69011b787448b270",
+    "type": "ui-text",
+    "z": "5935bee6efcdf160",
+    "group": "2674ddaa055146bd",
+    "order": 1,
+    "width": 0,
+    "height": 0,
+    "name": "Machine Condition",
+    "label": "Machine Condition",
+    "format": "{{msg.payload}}",
+    "layout": "row-spread",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "#717171",
+    "wrapText": false,
+    "className": "",
+    "value": "payload",
+    "valueType": "msg",
+    "x": 490,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "0f348852b1aa85a9",
+    "type": "ui-chart",
+    "z": "5935bee6efcdf160",
+    "group": "2674ddaa055146bd",
+    "name": "Temperature Trend",
+    "label": "chart",
+    "order": 7,
+    "chartType": "line",
+    "category": "topic",
+    "categoryType": "msg",
+    "xAxisLabel": "Time",
+    "xAxisProperty": "",
+    "xAxisPropertyType": "timestamp",
+    "xAxisType": "time",
+    "xAxisFormat": "",
+    "xAxisFormatType": "auto",
+    "xmin": "",
+    "xmax": "",
+    "yAxisLabel": "Temperature (\u00b0C)",
+    "yAxisProperty": "payload",
+    "yAxisPropertyType": "msg",
+    "ymin": "0",
+    "ymax": "100",
+    "bins": 10,
+    "action": "append",
+    "stackSeries": false,
+    "pointShape": "circle",
+    "pointRadius": 4,
+    "showLegend": true,
+    "removeOlder": "2",
+    "removeOlderUnit": "60",
+    "removeOlderPoints": "60",
+    "colors": [
+      "#0095ff",
+      "#ff0000",
+      "#ff7f0e",
+      "#2ca02c",
+      "#a347e1",
+      "#d62728",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "textColor": [
+      "#666666"
+    ],
+    "textColorDefault": true,
+    "gridColor": [
+      "#e5e5e5"
+    ],
+    "gridColorDefault": true,
+    "width": 6,
+    "height": 8,
+    "className": "",
+    "interpolation": "linear",
+    "x": 490,
+    "y": 160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "a6dd9cfb7a64cae7",
+    "type": "ui-chart",
+    "z": "5935bee6efcdf160",
+    "group": "2674ddaa055146bd",
+    "name": "Vibration Trend",
+    "label": "chart",
+    "order": 8,
+    "chartType": "line",
+    "category": "topic",
+    "categoryType": "msg",
+    "xAxisLabel": "Time",
+    "xAxisProperty": "",
+    "xAxisPropertyType": "timestamp",
+    "xAxisType": "time",
+    "xAxisFormat": "",
+    "xAxisFormatType": "auto",
+    "xmin": "",
+    "xmax": "",
+    "yAxisLabel": "Vibration (g)",
+    "yAxisProperty": "payload",
+    "yAxisPropertyType": "msg",
+    "ymin": "0",
+    "ymax": "0.5",
+    "bins": 10,
+    "action": "append",
+    "stackSeries": false,
+    "pointShape": "circle",
+    "pointRadius": 4,
+    "showLegend": true,
+    "removeOlder": "2",
+    "removeOlderUnit": "60",
+    "removeOlderPoints": "60",
+    "colors": [
+      "#0095ff",
+      "#ff0000",
+      "#ff7f0e",
+      "#2ca02c",
+      "#a347e1",
+      "#d62728",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "textColor": [
+      "#666666"
+    ],
+    "textColorDefault": true,
+    "gridColor": [
+      "#e5e5e5"
+    ],
+    "gridColorDefault": true,
+    "width": 6,
+    "height": 8,
+    "className": "",
+    "interpolation": "linear",
+    "x": 480,
+    "y": 240,
+    "wires": [
+      []
+    ]
+  }
+]
