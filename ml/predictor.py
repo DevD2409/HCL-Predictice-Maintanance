@@ -149,6 +149,10 @@ class PredictiveMaintenanceAI:
             p_warning = float(probs[1]) if len(probs) > 1 else 0.0
             p_fault = float(probs[2]) if len(probs) > 2 else 0.0
 
+            # Expose the actual maximum predicted class probability
+            confidence_percent = round(float(max(probs)) * 100.0, 1)
+            is_heuristic = False
+
             # Failure risk index: weighted risk score 0 to 100%
             failure_risk = round((p_warning * 45.0 + p_fault * 100.0), 2)
             if pred_condition == "Fault":
@@ -158,6 +162,8 @@ class PredictiveMaintenanceAI:
             rul_hours = round(float(self.regressor.predict(X_scaled)[0]), 1)
         else:
             # Intelligent Physics-based Fallback
+            confidence_percent = None
+            is_heuristic = True
             if vib >= 0.20 or temp >= 60.0:
                 pred_condition = "Fault"
                 failure_risk = round(min(100.0, 75.0 + (vib * 50)), 2)
@@ -190,10 +196,12 @@ class PredictiveMaintenanceAI:
                 "humidity_percent": humidity
             },
             "predicted_condition": pred_condition,
+            "confidence_percent": confidence_percent,
+            "is_heuristic": is_heuristic,
             "failure_risk_percent": failure_risk,
             "estimated_rul_hours": rul_hours,
             "anomaly_score": anomaly_score,
             "root_cause_analysis": root_cause,
             "prescriptive_action": prescriptive,
-            "model_version": "RandomForest-v1.0"
+            "model_version": "RandomForest-v1.0" if not is_heuristic else "Physics-Heuristic-v1.0"
         }

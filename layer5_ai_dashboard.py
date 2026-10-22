@@ -204,7 +204,7 @@ def render_dashboard():
         st.caption("Layer 3: SQLite Persistence ✅")
         st.caption("Layer 4: Node-RED Flows ✅")
         st.caption("Layer 5: AI/ML & Auth & Alerts ✅")
-        st.caption("Layer 6: ESP32 & Actuators ✅")
+        st.caption("Layer 6: ESP32 & Actuators 🟡 (Firmware prepared; HW validation pending)")
 
         st.divider()
         if st.button("🚪 Log Out", use_container_width=True):
@@ -239,7 +239,11 @@ def render_dashboard():
     with head_col2:
         status_html = f"<div class='status-{cond.lower()}'>Machine State: {cond.upper()}</div>"
         st.markdown(status_html, unsafe_allow_html=True)
-        st.markdown(f"**AI Confidence:** `99.2%` | **Model:** `{prediction.get('model_version')}`")
+        conf = prediction.get("confidence_percent")
+        if conf is not None:
+            st.markdown(f"**AI Confidence:** `{conf:.1f}%` | **Model:** `{prediction.get('model_version')}`")
+        else:
+            st.markdown(f"**Mode:** `Physics Heuristic` | **Model:** `{prediction.get('model_version')}`")
 
     st.markdown("---")
 

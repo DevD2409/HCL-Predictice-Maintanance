@@ -262,8 +262,8 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         if path == "/predict":
             pred = ai_engine.predict(data)
-            # Create alert if necessary
-            alert_mgr.create_alert(pred)
+            # Prediction is returned directly; automatic alert persistence is
+            # handled exclusively by the background telemetry monitor loop.
             self._set_headers(200)
             self.wfile.write(json.dumps(pred).encode("utf-8"))
 

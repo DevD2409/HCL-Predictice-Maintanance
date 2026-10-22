@@ -69,10 +69,22 @@ float current_rpm = 1450.0;
 unsigned long last_publish_time = 0;
 const unsigned long PUBLISH_INTERVAL_MS = 1000;
 
+// Telemetry sensor condition (reported via MQTT)
 String current_condition = "Healthy";
+
+// Dedicated physical actuator state: "Healthy", "Warning", "Fault"
+String actuator_state = "Healthy";
+
 bool buzzer_active = false;
 unsigned long buzzer_timer = 0;
 bool buzzer_pin_state = false;
+
+// Remote MQTT actuator command override policy:
+// A remote AI alert / command overrides local sensor condition for REMOTE_OVERRIDE_DURATION_MS
+// unless superseded or expired, preventing local sensor loops from silently cancelling remote alerts.
+bool remote_override_active = false;
+unsigned long remote_override_start_time = 0;
+const unsigned long REMOTE_OVERRIDE_DURATION_MS = 10000; // 10 seconds hold for cloud AI alerts
 
 // Buzzer timing constants (milliseconds)
 const unsigned long BUZZER_CHIRP_ON_MS  = 100;   // Warning: buzzer ON duration
@@ -133,15 +145,17 @@ float read_vibration_rms() {
 // -----------------------------------------------------------------------------
 // Actuator Control (LEDs and Buzzer)
 // -----------------------------------------------------------------------------
-void set_actuators(String condition) {
-  // Reset buzzer state cleanly on any condition change
-  if (condition != current_condition) {
+void set_actuators(String target_condition) {
+  // Compare incoming condition with actuator_state BEFORE modifying state
+  bool condition_changed = (target_condition != actuator_state);
+
+  if (condition_changed) {
     digitalWrite(PIN_BUZZER, LOW);
     buzzer_pin_state = false;
     buzzer_timer = millis();
   }
 
-  if (condition == "Healthy") {
+  if (target_condition == "Healthy") {
     digitalWrite(PIN_LED_GREEN, HIGH);
     digitalWrite(PIN_LED_YELLOW, LOW);
     digitalWrite(PIN_LED_RED, LOW);
@@ -149,14 +163,14 @@ void set_actuators(String condition) {
     buzzer_active = false;
     buzzer_pin_state = false;
   }
-  else if (condition == "Warning") {
+  else if (target_condition == "Warning") {
     digitalWrite(PIN_LED_GREEN, LOW);
     digitalWrite(PIN_LED_YELLOW, HIGH);
     digitalWrite(PIN_LED_RED, LOW);
-    // Warning: non-blocking intermittent chirp handled in update_buzzer()
     buzzer_active = true;
+    // Intermittent chirps driven asynchronously by update_buzzer()
   }
-  else if (condition == "Fault") {
+  else if (target_condition == "Fault") {
     digitalWrite(PIN_LED_GREEN, LOW);
     digitalWrite(PIN_LED_YELLOW, LOW);
     digitalWrite(PIN_LED_RED, HIGH);
@@ -165,19 +179,28 @@ void set_actuators(String condition) {
     buzzer_active = true;
     buzzer_pin_state = true;
   }
+
+  // Update actuator_state AFTER handling the transition
+  actuator_state = target_condition;
 }
 
 /**
  * Non-blocking buzzer update — call every loop() iteration.
- * Warning state: intermittent chirps (100ms ON / 900ms OFF).
- * Fault state: continuous (already set HIGH in set_actuators).
  * Healthy state: no-op (buzzer_active == false).
+ * Warning state: intermittent chirps (100ms ON / 900ms OFF).
+ * Fault state: continuous (stays HIGH).
  */
 void update_buzzer() {
   if (!buzzer_active) return;
 
-  // Fault: buzzer stays HIGH continuously — nothing to toggle
-  if (current_condition == "Fault") return;
+  // Fault: buzzer stays HIGH continuously
+  if (actuator_state == "Fault") {
+    if (!buzzer_pin_state) {
+      digitalWrite(PIN_BUZZER, HIGH);
+      buzzer_pin_state = true;
+    }
+    return;
+  }
 
   // Warning: non-blocking intermittent chirp
   unsigned long now = millis();
@@ -217,10 +240,15 @@ void on_mqtt_message(char* topic, byte* payload, unsigned int length) {
     if (doc.containsKey("actuator_command")) {
       String cmd = doc["actuator_command"].as<String>();
       if (cmd == "BUZZER_ALARM") {
+        remote_override_active = true;
+        remote_override_start_time = millis();
         set_actuators("Fault");
       } else if (cmd == "BUZZER_WARNING_CHIRP") {
+        remote_override_active = true;
+        remote_override_start_time = millis();
         set_actuators("Warning");
       } else {
+        remote_override_active = false;
         set_actuators("Healthy");
       }
     }
@@ -326,18 +354,39 @@ void loop() {
     // Simulate nominal electrical load based on current mechanical speed
     float load_pct = constrain(map(current_rpm, 1200, 1500, 90, 45) + random(-3, 3), 35.0, 95.0);
 
-    // 2. Classify Physical Operating State
+    // 2. Classify Physical Operating State (Local Detection)
+    String detected_condition = "Healthy";
     if (vibration_g >= 0.20 || temp_c >= 60.0) {
-      current_condition = "Fault";
+      detected_condition = "Fault";
     } else if (vibration_g >= 0.08 || temp_c >= 45.0) {
-      current_condition = "Warning";
+      detected_condition = "Warning";
     } else {
-      current_condition = "Healthy";
+      detected_condition = "Healthy";
     }
 
-    set_actuators(current_condition);
+    // Check remote MQTT override expiration policy
+    if (remote_override_active && (now - remote_override_start_time >= REMOTE_OVERRIDE_DURATION_MS)) {
+      remote_override_active = false;
+      Serial.println("[Override] Remote AI actuator override expired. Reverting to local sensor control.");
+    }
+
+    // If a remote cloud AI alert is active, it takes precedence over local sensor actuators
+    // unless the local sensor detects an urgent Fault condition
+    if (remote_override_active) {
+      if (detected_condition == "Fault" && actuator_state != "Fault") {
+        // Local emergency Fault supersedes remote Warning
+        remote_override_active = false;
+        set_actuators("Fault");
+      }
+    } else {
+      set_actuators(detected_condition);
+    }
+
+    // Telemetry sensor condition is always the locally detected sensor condition
+    current_condition = detected_condition;
 
     // 3. Assemble ISO-Standard Machine JSON
+    // Telemetry always reports the actual sensor-detected condition
     time_t rawtime;
     time(&rawtime);
     struct tm * timeinfo = localtime(&rawtime);
@@ -352,7 +401,7 @@ void loop() {
     doc["vibration_g"] = round(vibration_g * 1000.0) / 1000.0;
     doc["rpm"] = (int)current_rpm;
     doc["load_percent"] = round(load_pct * 100.0) / 100.0;
-    doc["condition"] = current_condition;
+    doc["condition"] = detected_condition;
 
     char buffer[384];
     serializeJson(doc, buffer);

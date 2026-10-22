@@ -77,8 +77,10 @@ graph TD
 
 ## Machine Learning Capabilities (Layer 5)
 
-- **Condition Classifier:** `RandomForestClassifier` trained on machine operating telemetry with **100% test accuracy**.
-- **Remaining Useful Life (RUL) Regressor:** `RandomForestRegressor` with **R² = 0.9968**.
+> **Evaluation Note:** The reported metrics below were evaluated on the project's generated synthetic dataset. Because synthetic labels and RUL targets follow programmed degradation patterns, these figures reflect prototype algorithmic verification rather than real-world predictive accuracy. Validation on physical rotating machinery with real sensor data is still required before operational deployment.
+
+- **Condition Classifier:** `RandomForestClassifier` trained on machine operating telemetry with **100% test accuracy** (measured on synthetic benchmark split).
+- **Remaining Useful Life (RUL) Regressor:** `RandomForestRegressor` with **R² = 0.9968** (measured on synthetic benchmark split).
 - **Failure Risk Meter:** Dynamic probability index ($0.0\%$ to $100.0\%$).
 - **Anomaly Score:** Multi-variate deviation index from nominal operation baseline ($0$ to $100$).
 - **Root-Cause Diagnostics:** Identifies specific mechanical degradation signatures:
@@ -152,14 +154,15 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Ensure `.env` contains your HiveMQ credentials:
+Ensure `.env` contains your HiveMQ credentials and matches the active telemetry topic used by `publisher.py`, `layer3_storage.py`, and `esp32_firmware.ino`:
 ```env
 HIVEMQ_HOST=your-cluster-id.s1.eu.hivemq.cloud
 HIVEMQ_PORT=8883
 HIVEMQ_USERNAME=your_username
 HIVEMQ_PASSWORD=your_password
-MQTT_TOPIC=machine/telemetry
+MQTT_TOPIC=hcl/predictive-maintenance/motor01/data
 ```
+*(Note: Your local `.env` defines the runtime broker credentials and must configure `MQTT_TOPIC` to match the topic subscribed by `layer3_storage.py` and published by the edge components).*
 
 ### 2. Retrain Machine Learning Models (Optional)
 ```powershell
@@ -195,11 +198,13 @@ node-red
 ```
 Access Node-RED Dashboard: `http://localhost:1880/dashboard/predictive-maintenance`
 
+> **Flow Configuration Note:**
+> - `flows/node_red_flow.json` is the **canonical** exported flow (contains complete FlowFuse Dashboard 2.0 configuration, SQLite query, gauges, and historical trends).
+> - The embedded SQLite configuration node references `machine_data.db`. If moving the project folder or importing onto a new machine, edit the SQLite config node in Node-RED to point to the local database file path before clicking **Deploy**.
+
 ### 7. Run Hardware Actuator Bridge (Layer 6)
 ```powershell
 # Terminal 6
 python hardware/hardware_bridge.py
 ```
 Simulates/controls GPIO Pin 18 (Green LED), Pin 19 (Yellow LED), Pin 5 (Red LED), and Pin 23 (Audible Buzzer alarm via PC speaker).
-#   H C L - P r e d i c t i c e - M a i n t a n a n c e  
- 

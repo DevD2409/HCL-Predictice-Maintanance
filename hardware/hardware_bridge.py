@@ -31,12 +31,12 @@ ALERT_TOPIC = "machine/alerts"
 
 class HardwareActuatorController:
     """
-    Physical & Virtual Hardware Actuator Controller.
-    Manages:
+    Virtual Actuator Simulator & Display Controller.
+    Simulates ESP32 actuator behaviors and visualizes logic state for:
       - Green LED  (GPIO 18 / Normal)
       - Yellow LED (GPIO 19 / Warning)
       - Red LED    (GPIO 5 / Fault)
-      - Active Buzzer (GPIO 23 / Audio Alarm)
+      - Active Buzzer (GPIO 23 / Audio Alarm via PC speaker)
     """
 
     def __init__(self):
@@ -88,11 +88,11 @@ class HardwareActuatorController:
         b_box = "[ALARM] 🔊" if self.buzzer else "[SILENT] 🔇"
 
         print(
-            f" [HARDWARE ACTUATORS] State: {self.current_state:7} | "
+            f" [VIRTUAL ACTUATORS] State: {self.current_state:7} | "
             f"Pin 18 (Green): {g_box} | "
             f"Pin 19 (Yellow): {y_box} | "
-            f"Pin 21 (Red): {r_box} | "
-            f"Pin 22 (Buzzer): {b_box}"
+            f"Pin 5 (Red): {r_box} | "
+            f"Pin 23 (Buzzer): {b_box}"
         )
 
 
@@ -130,8 +130,8 @@ def on_message(client, userdata, message):
 
 def run_bridge():
     print("=" * 70)
-    print(" HCL Layer 6 — Hardware Actuator & Microcontroller Bridge")
-    print(" Simulating / Interfacing ESP32 GPIO Pins (18, 19, 21, 22)")
+    print(" HCL Layer 6 — Virtual Hardware Actuator Simulator & Display")
+    print(" Simulating ESP32 Actuator States for GPIO Pins (18, 19, 5, 23)")
     print("=" * 70)
 
     actuators.display_pin_status()

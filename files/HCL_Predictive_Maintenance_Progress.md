@@ -4,7 +4,7 @@
 
 **Project:** Predictive Maintenance for Rotating Machinery Using IoT Data  
 **Current development environment:** VS Code on Windows  
-**Current date/status:** **COMPLETED ALL LAYERS (Layer 1 through Layer 6)**  
+**Current date/status:** **Layers 1–5 Software Prototype Validated; Layer 6 Hardware Integration Code Prepared (Physical Hardware Validation Pending)**  
 **Machine used in simulation:** `MOTOR_01`
 
 ---
@@ -884,7 +884,7 @@ SQLite Telemetry (`machine_data.db`)
 
 ---
 
-# 22. Layer 6 — Real Hardware Integration & ESP32 Firmware — COMPLETED ✅
+# 22. Layer 6 — Real Hardware Integration & ESP32 Firmware — Prototype Prepared 🟡
 
 ## Architecture
 
@@ -914,8 +914,8 @@ Python SQLite Storage & AI Service
 2. **Physical Actuator Indicators (`hardware/circuit_diagram.md`)**:
    - **Green LED (GPIO 18):** Solid ON when machine is Healthy.
    - **Yellow LED (GPIO 19):** Blinking when machine enters Warning state.
-   - **Red LED (GPIO 21):** Rapid pulsing when machine enters Fault state.
-   - **Active Buzzer (GPIO 22):** Silent on Healthy, intermittent chirp on Warning, continuous audible alarm on Fault.
+   - **Red LED (GPIO 5):** Rapid pulsing when machine enters Fault state.
+   - **Active Buzzer (GPIO 23):** Silent on Healthy, intermittent chirp on Warning, continuous audible alarm on Fault.
 
 3. **Hardware Bridge & Simulator (`hardware/hardware_bridge.py`)**:
    - Enables full hardware actuation testing with or without physical ESP32 connected.
