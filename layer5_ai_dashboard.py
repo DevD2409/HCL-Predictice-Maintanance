@@ -221,8 +221,9 @@ def render_dashboard():
     latest = df.iloc[0].to_dict()
     prediction = ai.predict(latest)
 
-    # Automatically check and log alert for new readings
-    alert_mgr.create_alert(prediction)
+    # NOTE: Alerts are created exclusively by ml_service.py's background
+    # monitor loop to avoid duplicate alert insertion.  The dashboard only
+    # displays and manages (acknowledge / resolve) existing alerts.
 
     cond = prediction["predicted_condition"]
     risk = prediction["failure_risk_percent"]

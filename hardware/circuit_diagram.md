@@ -20,8 +20,8 @@ In addition, physical actuators (Tri-color LEDs and an Active Buzzer) are connec
 | 4 | **Optical / Hall Sensor** | LM393 Speed Sensor module with slotted disc / magnet | 1 | Shaft Rotational Speed (RPM) |
 | 5 | **Green LED (5mm)** | 2.0V forward, 20mA | 1 | Healthy Indicator (GPIO 18) |
 | 6 | **Yellow LED (5mm)**| 2.1V forward, 20mA | 1 | Warning Indicator (GPIO 19) |
-| 7 | **Red LED (5mm)**   | 2.0V forward, 20mA | 1 | Fault / Emergency Indicator (GPIO 21) |
-| 8 | **Active Buzzer**   | 5V / 3.3V DC piezo active buzzer | 1 | Acoustic Alarm (GPIO 22) |
+| 7 | **Red LED (5mm)**   | 2.0V forward, 20mA | 1 | Fault / Emergency Indicator (GPIO 5) |
+| 8 | **Active Buzzer**   | 5V / 3.3V DC piezo active buzzer | 1 | Acoustic Alarm (GPIO 23) |
 | 9 | **Resistors**       | 220 Ω (LEDs), 4.7 kΩ (DHT pull-up) | 4 | Current limiting & Bus pull-up |
 | 10| **Breadboard / PCB**| Half/Full-size solderless breadboard + jumper wires | 1 | Prototyping interconnect |
 
@@ -39,10 +39,8 @@ In addition, physical actuators (Tri-color LEDs and an Active Buzzer) are connec
 | **GPIO 13** | Optical / Hall Tachometer | D0 (OUT) | Digital Interrupt | Hardware interrupt on falling edge for RPM |
 | **GPIO 18** | Green Status LED | Anode (+) | Digital Output | High = Healthy Status (via 220Ω resistor) |
 | **GPIO 19** | Yellow Status LED| Anode (+) | Digital Output | High = Warning Status (via 220Ω resistor) |
-| **GPIO 21\***| Red Status LED   | Anode (+) | Digital Output | High = Fault Status (via 220Ω resistor) |
+| **GPIO 5**  | Red Status LED   | Anode (+) | Digital Output | High = Fault Status (via 220Ω resistor) |
 | **GPIO 23** | Active Buzzer    | (+) Terminal| Digital Output| High = Alarm Active, Low = Silent |
-
-*\*Note: When using GPIO 21 for I2C SDA, the Red LED is wired to GPIO 5 or GPIO 27 to avoid I2C conflict.*
 
 ---
 

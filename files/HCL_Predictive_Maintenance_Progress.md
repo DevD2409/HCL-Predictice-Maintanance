@@ -978,4 +978,4 @@ python hardware/hardware_bridge.py
 | **Hardware Actuator Bridge** | `hardware/hardware_bridge.py` | Virtual/physical GPIO actuator controller with audible alarm |
 | **Circuit Diagram & BOM** | `hardware/circuit_diagram.md` | Pinout tables, wiring schematics, and bill of materials |
 
-**Status:** ALL LAYERS (1 through 6) ARE FULLY IMPLEMENTED, TESTED, AND VERIFIED ✅
+**Status:** Layers 1–5 have been implemented and validated in the software prototype. Layer 6 hardware integration code and wiring design have been prepared for ESP32-based real-sensor deployment; physical hardware validation remains pending.

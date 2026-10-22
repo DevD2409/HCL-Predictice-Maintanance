@@ -42,6 +42,32 @@ mqtt_client = None
 last_analyzed_id = 0
 
 
+def init_last_analyzed_id():
+    """Initialize processing cursor from the latest existing reading in SQLite.
+
+    This prevents the service from re-processing all historical records
+    whenever it restarts. If the database or table does not yet exist,
+    the cursor stays at 0 so all future inserts will be processed.
+    """
+    global last_analyzed_id
+    try:
+        if DB_PATH.exists():
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(id) FROM machine_readings")
+            row = cursor.fetchone()
+            conn.close()
+            if row and row[0] is not None:
+                last_analyzed_id = row[0]
+                print(f"[AI Service] Initialized processing cursor at reading ID {last_analyzed_id} (skipping historical records).")
+            else:
+                print("[AI Service] machine_readings table is empty. Will process from ID 0.")
+        else:
+            print(f"[AI Service] Database not found at {DB_PATH}. Will wait for data.")
+    except Exception as e:
+        print(f"[AI Service] Could not read max ID from database: {e}. Starting from ID 0.")
+
+
 # -------------------------------------------------
 # MQTT Integration for Publishing Alerts & Commands
 # -------------------------------------------------
@@ -273,6 +299,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
 def run_server():
+    init_last_analyzed_id()
     init_mqtt()
 
     # Start background monitor thread

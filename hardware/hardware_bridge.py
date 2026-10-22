@@ -35,8 +35,8 @@ class HardwareActuatorController:
     Manages:
       - Green LED  (GPIO 18 / Normal)
       - Yellow LED (GPIO 19 / Warning)
-      - Red LED    (GPIO 21 / Fault)
-      - Active Buzzer (GPIO 22 / Audio Alarm)
+      - Red LED    (GPIO 5 / Fault)
+      - Active Buzzer (GPIO 23 / Audio Alarm)
     """
 
     def __init__(self):

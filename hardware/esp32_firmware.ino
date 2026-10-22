@@ -11,8 +11,8 @@
  * - Optical / Hall-Effect Sensor (GPIO 13) -> RPM via Hardware Interrupt
  * - Green LED (GPIO 18) -> Machine Healthy Status
  * - Yellow LED (GPIO 19) -> Machine Warning Status
- * - Red LED (GPIO 21) -> Machine Fault / Critical Status
- * - Active Buzzer (GPIO 22) -> Audible Alarm
+ * - Red LED (GPIO 5) -> Machine Fault / Critical Status
+ * - Active Buzzer (GPIO 23) -> Audible Alarm
  * 
  * Protocol: MQTT over TLS (Port 8883) to HiveMQ Cloud
  * Payload Format: JSON matching Python & SQLite pipeline schema
@@ -37,7 +37,7 @@ const int   MQTT_PORT     = 8883;
 const char* MQTT_USER     = "YOUR_HIVEMQ_USERNAME";
 const char* MQTT_PASSWORD = "YOUR_HIVEMQ_PASSWORD";
 
-const char* MQTT_PUB_TOPIC = "machine/telemetry";
+const char* MQTT_PUB_TOPIC = "hcl/predictive-maintenance/motor01/data";
 const char* MQTT_SUB_TOPIC = "machine/commands";
 const char* MQTT_ALERT_TOPIC = "machine/alerts";
 
@@ -50,8 +50,8 @@ const char* MQTT_ALERT_TOPIC = "machine/alerts";
 
 #define PIN_LED_GREEN 18
 #define PIN_LED_YELLOW 19
-#define PIN_LED_RED   21
-#define PIN_BUZZER    22
+#define PIN_LED_RED   5
+#define PIN_BUZZER    23
 
 #define MPU6050_ADDR  0x68
 
@@ -72,6 +72,11 @@ const unsigned long PUBLISH_INTERVAL_MS = 1000;
 String current_condition = "Healthy";
 bool buzzer_active = false;
 unsigned long buzzer_timer = 0;
+bool buzzer_pin_state = false;
+
+// Buzzer timing constants (milliseconds)
+const unsigned long BUZZER_CHIRP_ON_MS  = 100;   // Warning: buzzer ON duration
+const unsigned long BUZZER_CHIRP_OFF_MS = 900;   // Warning: buzzer OFF duration
 
 // -----------------------------------------------------------------------------
 // RPM Sensor Interrupt Service Routine (ISR)
@@ -129,18 +134,26 @@ float read_vibration_rms() {
 // Actuator Control (LEDs and Buzzer)
 // -----------------------------------------------------------------------------
 void set_actuators(String condition) {
+  // Reset buzzer state cleanly on any condition change
+  if (condition != current_condition) {
+    digitalWrite(PIN_BUZZER, LOW);
+    buzzer_pin_state = false;
+    buzzer_timer = millis();
+  }
+
   if (condition == "Healthy") {
     digitalWrite(PIN_LED_GREEN, HIGH);
     digitalWrite(PIN_LED_YELLOW, LOW);
     digitalWrite(PIN_LED_RED, LOW);
     digitalWrite(PIN_BUZZER, LOW);
     buzzer_active = false;
+    buzzer_pin_state = false;
   }
   else if (condition == "Warning") {
     digitalWrite(PIN_LED_GREEN, LOW);
     digitalWrite(PIN_LED_YELLOW, HIGH);
     digitalWrite(PIN_LED_RED, LOW);
-    // Warning: intermittent beep
+    // Warning: non-blocking intermittent chirp handled in update_buzzer()
     buzzer_active = true;
   }
   else if (condition == "Fault") {
@@ -150,6 +163,38 @@ void set_actuators(String condition) {
     // Fault: continuous alarm
     digitalWrite(PIN_BUZZER, HIGH);
     buzzer_active = true;
+    buzzer_pin_state = true;
+  }
+}
+
+/**
+ * Non-blocking buzzer update — call every loop() iteration.
+ * Warning state: intermittent chirps (100ms ON / 900ms OFF).
+ * Fault state: continuous (already set HIGH in set_actuators).
+ * Healthy state: no-op (buzzer_active == false).
+ */
+void update_buzzer() {
+  if (!buzzer_active) return;
+
+  // Fault: buzzer stays HIGH continuously — nothing to toggle
+  if (current_condition == "Fault") return;
+
+  // Warning: non-blocking intermittent chirp
+  unsigned long now = millis();
+  if (buzzer_pin_state) {
+    // Currently ON — check if chirp duration elapsed
+    if (now - buzzer_timer >= BUZZER_CHIRP_ON_MS) {
+      digitalWrite(PIN_BUZZER, LOW);
+      buzzer_pin_state = false;
+      buzzer_timer = now;
+    }
+  } else {
+    // Currently OFF — check if silence duration elapsed
+    if (now - buzzer_timer >= BUZZER_CHIRP_OFF_MS) {
+      digitalWrite(PIN_BUZZER, HIGH);
+      buzzer_pin_state = true;
+      buzzer_timer = now;
+    }
   }
 }
 
@@ -250,6 +295,9 @@ void loop() {
     connect_mqtt();
   }
   mqttClient.loop();
+
+  // Drive non-blocking buzzer behavior every iteration
+  update_buzzer();
 
   unsigned long now = millis();
 
