@@ -32,11 +32,11 @@ ALERT_TOPIC = "machine/alerts"
 class HardwareActuatorController:
     """
     Virtual Actuator Simulator & Display Controller.
-    Simulates ESP32 actuator behaviors and visualizes logic state for:
+    Simulates ESP32-S3 actuator behaviors and visualizes logic state for:
       - Green LED  (GPIO 18 / Normal)
-      - Yellow LED (GPIO 19 / Warning)
+      - Yellow LED (GPIO 17 / Warning)
       - Red LED    (GPIO 5 / Fault)
-      - Active Buzzer (GPIO 23 / Audio Alarm via PC speaker)
+      - Active Buzzer (GPIO 15 / Audio Alarm via PC speaker)
     """
 
     def __init__(self):
@@ -76,23 +76,22 @@ class HardwareActuatorController:
             self.last_beep_time = now
             if HAS_WINSOUND and sys.platform == "win32":
                 try:
-                    # Non-blocking or quick beep
                     winsound.Beep(frequency, duration_ms)
                 except Exception:
                     pass
 
     def display_pin_status(self):
-        g_box = "[ON]  🟢" if self.green_led else "[OFF] ⚪"
-        y_box = "[ON]  🟡" if self.yellow_led else "[OFF] ⚪"
-        r_box = "[ON]  🔴" if self.red_led else "[OFF] ⚪"
-        b_box = "[ALARM] 🔊" if self.buzzer else "[SILENT] 🔇"
+        g_box = "[ON]" if self.green_led else "[OFF]"
+        y_box = "[ON]" if self.yellow_led else "[OFF]"
+        r_box = "[ON]" if self.red_led else "[OFF]"
+        b_box = "[ALARM]" if self.buzzer else "[SILENT]"
 
         print(
             f" [VIRTUAL ACTUATORS] State: {self.current_state:7} | "
-            f"Pin 18 (Green): {g_box} | "
-            f"Pin 19 (Yellow): {y_box} | "
-            f"Pin 5 (Red): {r_box} | "
-            f"Pin 23 (Buzzer): {b_box}"
+            f"GPIO 18 (Green): {g_box} | "
+            f"GPIO 17 (Yellow): {y_box} | "
+            f"GPIO 5 (Red): {r_box} | "
+            f"GPIO 15 (Buzzer): {b_box}"
         )
 
 
@@ -125,23 +124,32 @@ def on_message(client, userdata, message):
         actuators.update_actuators(condition, severity)
 
     except Exception as e:
-        print(f"[Hardware Bridge] Error processing command: {e}")
+        print(f"[Hardware Bridge] Payload decode error: {e}")
 
 
 def run_bridge():
-    print("=" * 70)
-    print(" HCL Layer 6 — Virtual Hardware Actuator Simulator & Display")
-    print(" Simulating ESP32 Actuator States for GPIO Pins (18, 19, 5, 23)")
-    print("=" * 70)
-
+    print("=" * 65)
+    print(" HCL Layer 6 - Virtual Hardware Actuator Simulator (ESP32-S3)")
+    print("=" * 65)
+    print("Listening for MQTT Alert Commands from Cloud AI Service...")
+    print("Initial Pin States:")
     actuators.display_pin_status()
+    print("-" * 65)
 
+    client_id = f"VirtualActuator_{uuid.uuid4().hex[:6]}"
     client = mqtt.Client(
-        mqtt.CallbackAPIVersion.VERSION2,
-        client_id=f"Hardware_Bridge_{uuid.uuid4().hex[:8]}"
+        callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+        client_id=client_id,
+        protocol=mqtt.MQTTv311,
     )
-    client.username_pw_set(USERNAME, PASSWORD)
-    client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
+
+    if USERNAME and PASSWORD:
+        client.username_pw_set(USERNAME, PASSWORD)
+
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    client.tls_set_context(context)
 
     client.on_connect = on_connect
     client.on_message = on_message
@@ -150,7 +158,7 @@ def run_bridge():
         client.connect(BROKER, PORT, keepalive=60)
         client.loop_forever()
     except KeyboardInterrupt:
-        print("\nHardware bridge stopped.")
+        print("\n[Hardware Bridge] Stopped by user.")
         client.disconnect()
 
 
