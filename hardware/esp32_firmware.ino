@@ -1,22 +1,21 @@
 /*
  * ==============================================================================
  * HCL Mini Project - Predictive Maintenance for Rotating Machinery Using IoT Data
- * Layer 6: ESP32-S3 Microcontroller Firmware with Physical Sensors & Actuators
+ * Layer 6: ESP32 Microcontroller Firmware with Physical Sensors & Actuators
  * ==============================================================================
  * 
  * Hardware Target:
- * - ESP32-S3 Dual-Core Xtensa LX7 Development Board with USB-C
+ * - Classic ESP32 Development Board (ESP-WROOM-32 / ESP32-DevKitC)
  * 
  * Connected Sensors & Actuators:
- * - MPU-6050 6-DOF IMU (I2C: SDA=GPIO 8, SCL=GPIO 9) -> Machinery Vibration (g RMS)
+ * - MPU-6050 6-DOF IMU (Hardware I2C: SDA=GPIO 21, SCL=GPIO 22) -> Machinery Vibration (g RMS)
  * - DHT11 Module (GPIO 4) -> Bearing & Ambient Temperature (deg C) & Humidity (%)
- * - 3-Pin IR Obstacle / Speed Sensor (GPIO 13) -> Shaft RPM via Non-Blocking ISR
+ * - 3-Pin IR Obstacle / Speed Sensor (GPIO 27) -> Shaft RPM via Non-Blocking ISR
  * - Green Status LED (GPIO 18) -> Machine Healthy Status (via 220 Ohm resistor)
- * - Yellow Status LED (GPIO 17) -> Machine Warning Status (via 220 Ohm resistor)
- *   [Moved from GPIO 19 to preserve ESP32-S3 Native USB D- signaling]
- * - Red Status LED (GPIO 5) -> Machine Fault / Critical Status (via 220 Ohm resistor)
- * - 3-Pin Active Buzzer Module (Signal=GPIO 15, VCC=3.3V, GND=GND)
- *   [Moved from classic GPIO 23 to safe general-purpose GPIO 15 on ESP32-S3]
+ * - Yellow Status LED (GPIO 19) -> Machine Warning Status (via 220 Ohm resistor)
+ * - Red Status LED (GPIO 23) -> Machine Fault / Critical Status (via 220 Ohm resistor)
+ * - 3-Pin Active Buzzer Module (Signal=GPIO 25, VCC=3.3V, GND=GND)
+ * - Motor Driver Control (Signal=GPIO 26, defaults OFF, safety interlock)
  * 
  * Protocol: MQTT over TLS (Port 8883) to HiveMQ Cloud
  * Payload Schema: ISO Standard JSON matching Python layer3_storage & SQLite schema
@@ -34,40 +33,88 @@
 // Network & HiveMQ Cloud Credentials
 // (Keep actual credentials secure in local build configuration)
 // -----------------------------------------------------------------------------
-const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID     = "vivo V30";
+const char* WIFI_PASSWORD = "********";
 
-const char* MQTT_BROKER   = "YOUR_HIVEMQ_HOST.hivemq.cloud";
+const char* MQTT_BROKER   = "859c8424773a4521b552450f2e67bc22.s1.eu.hivemq.cloud";
 const int   MQTT_PORT     = 8883;
-const char* MQTT_USER     = "YOUR_HIVEMQ_USERNAME";
-const char* MQTT_PASSWORD = "YOUR_HIVEMQ_PASSWORD";
+const char* MQTT_USER     = "Dev";
+const char* MQTT_PASSWORD = "Madangles@20";
 
 const char* MQTT_PUB_TOPIC   = "hcl/predictive-maintenance/motor01/data";
 const char* MQTT_SUB_TOPIC   = "machine/commands";
 const char* MQTT_ALERT_TOPIC = "machine/alerts";
 
 // -----------------------------------------------------------------------------
-// ESP32-S3 Pin Assignments
-// (Carefully chosen to avoid Native USB GPIO 19/20, Strapping, and SPI Flash)
+// HiveMQ Cloud TLS Root CA Certificate (ISRG Root X1)
+// Source: Internet Security Research Group (ISRG) / Let's Encrypt
+// Subject: CN=ISRG Root X1, O=Internet Security Research Group, C=US
+// Validity: 2015-06-04 11:04:38 GMT to 2035-06-04 11:04:38 GMT
+// Fingerprint (SHA-256): 96:BC:EC:06:26:49:76:F3:74:60:77:9A:CF:28:C5:A7:CF:E8:A3:C0:AA:E1:1A:8F:FC:EE:05:C0:BD:DF:08:C6
+// Fingerprint (SHA-1):   CA:BD:2A:79:A1:07:6A:31:F2:1D:25:36:35:CB:03:9D:43:29:A5:E8
 // -----------------------------------------------------------------------------
-#define I2C_SDA_PIN    8     // ESP32-S3 default hardware I2C SDA
-#define I2C_SCL_PIN    9     // ESP32-S3 default hardware I2C SCL
+const char* HIVEMQ_ROOT_CA = \
+"-----BEGIN CERTIFICATE-----\n" \
+"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\n" \
+"-----END CERTIFICATE-----\n";
+
+// -----------------------------------------------------------------------------
+// Classic ESP32 Pin Assignments
+// (Free from boot-strapping, SPI Flash GPIO 6-11, and input-only GPIO 34-39)
+// -----------------------------------------------------------------------------
+#define I2C_SDA_PIN    21    // Classic ESP32 default hardware I2C SDA
+#define I2C_SCL_PIN    22    // Classic ESP32 default hardware I2C SCL
 #define MPU6050_ADDR   0x68
 
 #define DHTPIN         4     // Digital 1-Wire pin for DHT11
 #define DHTTYPE        DHT11 // DHT 11 sensor model
 
-#define RPM_PIN        13    // Digital input for 3-Pin IR Speed Sensor module
+#define RPM_PIN        27    // Digital input for 3-Pin IR Speed Sensor module
 
 #define PIN_LED_GREEN  18    // Healthy Status LED
-#define PIN_LED_YELLOW 17    // Warning Status LED (Safe on ESP32-S3)
-#define PIN_LED_RED    5     // Fault Status LED
-#define PIN_BUZZER     15    // Active Buzzer module Signal pin
+#define PIN_LED_YELLOW 19    // Warning Status LED
+#define PIN_LED_RED    23    // Fault Status LED
+#define PIN_BUZZER     25    // Active Buzzer module Signal pin
+#define PIN_MOTOR_CTRL 26    // Motor Driver Control Signal pin (Low = OFF, High = ON)
 
-// Active Buzzer Logic Polarity:
-// Set to HIGH if driving NPN transistor module (buzzer sounds on HIGH).
-// Set to LOW if driving active-low PNP transistor module (buzzer sounds on LOW).
-#define BUZZER_ACTIVE_LEVEL HIGH
+// -----------------------------------------------------------------------------
+// Active Buzzer Configuration & Hardware Assumption
+// [UNVERIFIED HARDWARE ASSUMPTION]:
+// Set to LOW based on typical 3-pin PNP-transistor active buzzer modules (silent on HIGH,
+// sounding on LOW).
+// WARNING: Transistor polarity cannot be determined from module appearance alone.
+// If your physical buzzer sounds continuously at boot, or if you use an NPN-switched
+// module, change this definition to HIGH. Always verify module behavior on the bench.
+// -----------------------------------------------------------------------------
+#define BUZZER_ACTIVE_LEVEL LOW
 
 // -----------------------------------------------------------------------------
 // Tachometer (IR Sensor) Configuration & Constants
@@ -117,6 +164,9 @@ unsigned long buzzer_timer = 0;
 bool buzzer_pin_state = false;
 const unsigned long BUZZER_CHIRP_ON_MS  = 100; // Intermittent chirp ON duration
 const unsigned long BUZZER_CHIRP_OFF_MS = 900; // Intermittent chirp OFF duration
+
+// Motor driver state (strictly defaults to OFF, safety shutdown on Fault or disconnect)
+bool motor_running = false;
 
 // Remote Cloud AI Override Policy
 bool remote_override_active = false;
@@ -212,7 +262,7 @@ float read_vibration_rms() {
 }
 
 // -----------------------------------------------------------------------------
-// Hardware Actuator Control (LEDs and Active Buzzer)
+// Hardware Actuator Control (LEDs, Active Buzzer, Motor Driver)
 // -----------------------------------------------------------------------------
 void write_buzzer(bool state) {
   if (BUZZER_ACTIVE_LEVEL == HIGH) {
@@ -221,6 +271,18 @@ void write_buzzer(bool state) {
     digitalWrite(PIN_BUZZER, state ? LOW : HIGH);
   }
   buzzer_pin_state = state;
+}
+
+void write_motor(bool state) {
+  // SENSOR-VERIFICATION BUILD HARDENING:
+  // Motor energization is strictly blocked in this initial sensor-verification build.
+  // Physical motor power must remain disconnected until sensor validation is complete.
+  if (state) {
+    state = false;
+    Serial.println("[SAFETY] Blocked motor energization: Disabled in sensor-verification build.");
+  }
+  digitalWrite(PIN_MOTOR_CTRL, LOW);
+  motor_running = false;
 }
 
 void set_actuators(String target_condition) {
@@ -250,6 +312,7 @@ void set_actuators(String target_condition) {
     digitalWrite(PIN_LED_RED, HIGH);
     write_buzzer(true);
     buzzer_active = true;
+    write_motor(false); // Safety shutdown: Emergency motor stop on fault
   }
 
   actuator_state = target_condition;
@@ -300,6 +363,14 @@ void on_mqtt_message(char* topic, byte* payload, unsigned int length) {
       remote_override_active = true;
       remote_override_start_time = millis();
       set_actuators("Warning");
+    } else if (cmd == "MOTOR_STOP" || cmd == "EMERGENCY_STOP") {
+      write_motor(false);
+      Serial.println("[ACTUATOR] Remote command: Motor STOPPED.");
+    } else if (cmd == "MOTOR_START") {
+      // SENSOR-VERIFICATION BUILD HARDENING:
+      // MOTOR_START is strictly disabled and rejected in this build.
+      write_motor(false);
+      Serial.println("[SAFETY] REJECTED MOTOR_START: Motor operation is disabled in sensor-verification build.");
     } else {
       remote_override_active = false;
       set_actuators("Healthy");
@@ -311,8 +382,7 @@ void on_mqtt_message(char* topic, byte* payload, unsigned int length) {
 // Wi-Fi & MQTT TLS Connectivity
 // -----------------------------------------------------------------------------
 void connect_wifi() {
-  Serial.print("[WiFi] Connecting to SSID: ");
-  Serial.println(WIFI_SSID);
+  Serial.println("[WiFi] Connecting to configured network...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -332,11 +402,22 @@ void connect_wifi() {
 void connect_mqtt() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  espClient.setInsecure(); // Required for HiveMQ Cloud TLS port 8883
+  // ---------------------------------------------------------------------------
+  // Strict TLS Certificate Validation Policy:
+  // espClient.setInsecure() is strictly prohibited. The authoritative
+  // ISRG Root X1 CA certificate must be loaded with setCACert() prior to
+  // connecting to HiveMQ Cloud. Missing or empty CA is treated as a fatal failure.
+  // ---------------------------------------------------------------------------
+  if (HIVEMQ_ROOT_CA == nullptr || strlen(HIVEMQ_ROOT_CA) == 0) {
+    Serial.println("[TLS ERROR] Fatal: Root CA certificate is not configured or empty. Refusing insecure MQTT connection.");
+    return;
+  }
+
+  espClient.setCACert(HIVEMQ_ROOT_CA);
 
   if (!mqttClient.connected()) {
     Serial.print("[MQTT] Connecting to HiveMQ Cloud Broker...");
-    String clientId = "ESP32S3_Machinery_" + String(random(0xffff), HEX);
+    String clientId = "ESP32_Machinery_" + String(random(0xffff), HEX);
     if (mqttClient.connect(clientId.c_str(), MQTT_USER, MQTT_PASSWORD)) {
       Serial.println(" CONNECTED!");
       mqttClient.subscribe(MQTT_SUB_TOPIC);
@@ -351,11 +432,29 @@ void connect_mqtt() {
 // Setup Routine
 // -----------------------------------------------------------------------------
 void setup() {
+  // ---------------------------------------------------------------------------
+  // IMMEDIATE HARDWARE SAFETY INITIALIZATION:
+  // Drive buzzer and motor to safe OFF states immediately before any delays or UART overhead.
+  // ---------------------------------------------------------------------------
+  pinMode(PIN_BUZZER, OUTPUT);
+  write_buzzer(false); // Silence buzzer immediately based on BUZZER_ACTIVE_LEVEL
+
+  pinMode(PIN_MOTOR_CTRL, OUTPUT);
+  write_motor(false);  // Ensure motor driver control is strictly 0V (OFF)
+
+  pinMode(PIN_LED_GREEN, OUTPUT);
+  pinMode(PIN_LED_YELLOW, OUTPUT);
+  pinMode(PIN_LED_RED, OUTPUT);
+  digitalWrite(PIN_LED_GREEN, LOW);
+  digitalWrite(PIN_LED_YELLOW, LOW);
+  digitalWrite(PIN_LED_RED, LOW);
+
   Serial.begin(115200);
-  delay(1500); // Allow USB-Serial-JTAG to stabilize
+  delay(1000); // Allow UART and power rails to stabilize
 
   Serial.println("\n========================================================");
-  Serial.println(" HCL Rotating Machinery IoT Telemetry Node (ESP32-S3)");
+  Serial.println(" HCL Rotating Machinery IoT Telemetry Node (ESP32)");
+  Serial.println(" [SAFETY-HARDENED SENSOR-VERIFICATION BUILD]");
   Serial.println("========================================================");
   Serial.println(" Pin Configuration:");
   Serial.println("  - MPU6050:   SDA = GPIO " + String(I2C_SDA_PIN) + ", SCL = GPIO " + String(I2C_SCL_PIN));
@@ -364,14 +463,9 @@ void setup() {
   Serial.println("  - Green LED: GPIO " + String(PIN_LED_GREEN));
   Serial.println("  - Yellow LED:GPIO " + String(PIN_LED_YELLOW));
   Serial.println("  - Red LED:   GPIO " + String(PIN_LED_RED));
-  Serial.println("  - Buzzer:    GPIO " + String(PIN_BUZZER));
+  Serial.println("  - Buzzer:    GPIO " + String(PIN_BUZZER) + " (Active-LOW assumed)");
+  Serial.println("  - Motor Ctrl:GPIO " + String(PIN_MOTOR_CTRL) + " (DISABLED in this build)");
   Serial.println("========================================================\n");
-
-  pinMode(PIN_LED_GREEN, OUTPUT);
-  pinMode(PIN_LED_YELLOW, OUTPUT);
-  pinMode(PIN_LED_RED, OUTPUT);
-  pinMode(PIN_BUZZER, OUTPUT);
-  write_buzzer(false);
 
   // Configure IR sensor input with pullup
   pinMode(RPM_PIN, INPUT_PULLUP);
@@ -384,6 +478,15 @@ void setup() {
 
   // Network initialization
   connect_wifi();
+
+  // Strict TLS Root CA configuration before connecting to MQTT broker
+  if (HIVEMQ_ROOT_CA == nullptr || strlen(HIVEMQ_ROOT_CA) == 0) {
+    Serial.println("[TLS ERROR] Fatal: HiveMQ Root CA not configured.");
+  } else {
+    espClient.setCACert(HIVEMQ_ROOT_CA);
+    Serial.println("[TLS] HiveMQ Root CA configured successfully (ISRG Root X1).");
+  }
+
   mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
   mqttClient.setCallback(on_mqtt_message);
 
@@ -398,6 +501,11 @@ void setup() {
 void loop() {
   if (WiFi.status() == WL_CONNECTED) {
     if (!mqttClient.connected()) {
+      // Failsafe: Turn OFF motor if disconnected from MQTT
+      if (motor_running) {
+        Serial.println("[SAFETY] MQTT disconnected. Motor safety shutdown triggered.");
+        write_motor(false);
+      }
       static unsigned long last_mqtt_reconnect = 0;
       if (millis() - last_mqtt_reconnect > 5000) {
         last_mqtt_reconnect = millis();
@@ -405,6 +513,12 @@ void loop() {
       }
     } else {
       mqttClient.loop();
+    }
+  } else {
+    // Failsafe: Turn OFF motor if WiFi is not connected
+    if (motor_running) {
+      Serial.println("[SAFETY] WiFi disconnected. Motor safety shutdown triggered.");
+      write_motor(false);
     }
   }
 

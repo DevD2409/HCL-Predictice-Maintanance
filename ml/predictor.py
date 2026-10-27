@@ -74,8 +74,10 @@ class PredictiveMaintenanceAI:
         elif temp >= 45.0:
             causes.append("Elevated Temperature (Moderate thermal dissipation stress)")
 
-        if rpm < 1350:
+        if 0 < rpm < 1350:
             causes.append("Under-speed Phenomenon (Mechanical friction drag or voltage drop)")
+        elif rpm <= 0:
+            causes.append("Machine stationary / at rest")
 
         if load >= 75.0:
             causes.append("Heavy Dynamic Load (Operating above rated capacity)")
