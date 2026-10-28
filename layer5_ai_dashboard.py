@@ -327,7 +327,7 @@ def render_dashboard():
         st.divider()
 
         # ── Controls ────────────────────────────────────────────
-        auto_refresh = st.checkbox("Auto Refresh (2s)",
+        auto_refresh = st.checkbox("Auto Refresh (3s)",
                                    value=st.session_state.auto_refresh)
         st.session_state.auto_refresh = auto_refresh
         if st.button("🔄 Refresh Now", use_container_width=True):
@@ -362,90 +362,135 @@ def render_dashboard():
             st.session_state.user = None
             st.rerun()
 
-    # ── TOP HEADER BAR ──────────────────────────────────────────
-    initials = "".join([w[0] for w in user.get("full_name", "U").split()[:2]])
-    ts_display = latest.get("timestamp", "—")
 
-    # Search bar & status pill header
-    st.markdown(f"""
-    <div style="display:flex; justify-content:space-between;
-         align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
-        <div style="display:flex; align-items:center; gap:14px;">
-            <span style="font-size:1.35rem; font-weight:700; color:{TEXT_HEADING};
-                  font-family:Poppins,sans-serif; letter-spacing:-0.02em;">Dashboard</span>
-            <div style="display:inline-flex; align-items:center; gap:6px;
-                 background:{BG_CARD}; padding:4px 12px; border-radius:20px;
-                 border:1px solid {BORDER}; font-size:0.75rem; color:{TEXT_MUTED};
-                 font-family:Poppins,sans-serif;">
-                <span style="height:7px;width:7px;border-radius:50%;
-                      background:{GREEN};display:inline-block;
-                      animation:pulse-green 2s infinite;"></span>
-                LIVE · {ts_display}
-            </div>
-        </div>
-        <div style="display:flex; align-items:center; gap:12px;">
-            <div style="display:flex; align-items:center; gap:8px;
-                 background:{BG_CARD}; border:1px solid {BORDER};
-                 border-radius:20px; padding:4px 12px; color:{TEXT_MUTED};
-                 font-size:0.75rem; font-family:Poppins;">
-                <span>🔍</span>
-                <span>Search metrics...</span>
-            </div>
-            <div style="position:relative; background:{BG_CARD}; border:1px solid {BORDER};
-                 width:34px; height:34px; border-radius:50%; display:flex;
-                 align-items:center; justify-content:center; cursor:pointer;">
-                <span style="font-size:1.0rem;">🔔</span>
-                {'<span style="position:absolute;top:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:'+RED+';font-size:0.55rem;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:Poppins;">'+str(active_alert_count)+'</span>' if active_alert_count > 0 else ''}
-            </div>
-            {pill(cond_label(cond), cc, font_size="0.72rem")}
-            <div style="display:flex; align-items:center; gap:8px;
-                 background:{BG_CARD}; padding:4px 14px 4px 5px;
-                 border-radius:22px; border:1px solid {BORDER};">
-                <div style="width:28px;height:28px;border-radius:50%;
-                     background:{GREEN};display:flex;align-items:center;
-                     justify-content:center;font-size:0.7rem;font-weight:700;
-                     color:#fff;font-family:Poppins;">{initials}</div>
-                <div>
-                    <div style="font-size:0.76rem;font-weight:600;
-                         color:{TEXT_PRIMARY};font-family:Poppins;line-height:1.2;">
-                        {user.get('full_name','Operator')}</div>
-                    <div style="font-size:0.6rem;color:{TEXT_SUBTLE};
-                         font-family:Poppins;">{role.title()}</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # ── PAGE ROUTING ────────────────────────────────────────────
+    # ── PAGE ROUTING & FRAGMENT CONTROLLER ──────────────────────
     page = st.session_state.page
 
-    def _render_current_page():
+    # Auto-refresh interval: 3s on live telemetry pages (Overview & Trends) when enabled
+    refresh_interval = 3 if (st.session_state.get("auto_refresh", True) and page in ["Overview", "Trends"]) else None
+
+    def _render_current_page(df_cur, latest_cur, pred_cur, cond_cur, risk_cur, rul_cur,
+                             anomaly_cur, conf_cur, root_cause_cur, action_data_cur,
+                             cc_cur, health_score_cur, active_alert_count_cur):
         if page == "Overview":
-            _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
-                           conf, root_cause, action_data, cc, health_score,
-                           active_alert_count, perms, user)
+            _page_overview(df_cur, latest_cur, pred_cur, cond_cur, risk_cur, rul_cur, anomaly_cur,
+                           conf_cur, root_cause_cur, action_data_cur, cc_cur, health_score_cur,
+                           active_alert_count_cur, perms, user)
         elif page == "Trends":
-            _page_trends(df)
+            _page_trends(df_cur)
         elif page == "Alerts":
-            _page_alerts(perms, user, active_alert_count)
+            _page_alerts(perms, user, active_alert_count_cur)
         elif page == "What-If":
-            _page_sandbox(latest)
+            _page_sandbox(latest_cur)
         elif page == "AI Model":
             _page_model()
         elif page == "Layers":
             _page_layers()
 
-    # Auto-refresh using st.fragment if supported
-    if hasattr(st, "fragment") and st.session_state.get("auto_refresh", True) and page in ["Overview", "Trends"]:
-        @st.fragment(run_every=2)
+    def _render_live_view():
+        # Fresh query from SQLite on each fragment execution
+        df_fresh = fetch_recent_data(limit=60)
+        if df_fresh.empty:
+            st.markdown(card(
+                f'<div style="text-align:center;padding:32px;">'
+                f'<div style="font-size:1.6rem;">📡</div>'
+                f'<div style="font-size:1rem;font-weight:600;color:{TEXT_HEADING};'
+                f'margin-top:8px;">No Telemetry Data</div>'
+                f'<div style="font-size:0.82rem;color:{TEXT_MUTED};margin-top:4px;">'
+                f'Ensure <code>layer3_storage.py</code> is running.</div></div>'
+            ), unsafe_allow_html=True)
+            return
+
+        latest_fresh = df_fresh.iloc[0].to_dict()
+        pred_fresh = ai.predict(latest_fresh)
+
+        cond_fresh = pred_fresh.get("predicted_condition", "Healthy")
+        risk_fresh = pred_fresh.get("failure_risk_percent", 0.0)
+        rul_fresh = pred_fresh.get("estimated_rul_hours", 0.0)
+        anomaly_fresh = pred_fresh.get("anomaly_score", 0.0)
+        conf_fresh = pred_fresh.get("confidence_percent", 81.0) or 81.0
+        root_cause_fresh = pred_fresh.get("root_cause_analysis",
+                                         "Machine stationary / at rest")
+        action_data_fresh = pred_fresh.get("prescriptive_action",
+                                          {"action": "ROUTINE MONITORING",
+                                           "priority": "P3 - Normal",
+                                           "timeframe": "Monthly"})
+
+        active_alert_cnt_fresh = alert_mgr.get_active_count()
+        cc_fresh = cond_color(cond_fresh)
+        health_score_fresh = max(0, min(100, 100 - risk_fresh))
+        ts_display_fresh = latest_fresh.get("timestamp", "—")
+
+        # ── User identity & avatar initials ─────────────────────────
+        curr_user = st.session_state.get("user") or user or {}
+        curr_role = curr_user.get("role", "operator")
+        initials = "".join([w[0] for w in curr_user.get("full_name", "U").split()[:2]]).upper() or "U"
+
+        # ── TOP HEADER BAR (Inside fragment to ensure LIVE timestamp updates) ──
+        st.markdown(f"""
+        <div style="display:flex; justify-content:space-between;
+             align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:14px;">
+                <span style="font-size:1.35rem; font-weight:700; color:{TEXT_HEADING};
+                      font-family:Poppins,sans-serif; letter-spacing:-0.02em;">Dashboard</span>
+                <div style="display:inline-flex; align-items:center; gap:6px;
+                     background:{BG_CARD}; padding:4px 12px; border-radius:20px;
+                     border:1px solid {BORDER}; font-size:0.75rem; color:{TEXT_MUTED};
+                     font-family:Poppins,sans-serif;">
+                    <span style="height:7px;width:7px;border-radius:50%;
+                          background:{GREEN};display:inline-block;
+                          animation:pulse-green 2s infinite;"></span>
+                    LIVE · {ts_display_fresh}
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:12px;">
+                <div style="display:flex; align-items:center; gap:8px;
+                     background:{BG_CARD}; border:1px solid {BORDER};
+                     border-radius:20px; padding:4px 12px; color:{TEXT_MUTED};
+                     font-size:0.75rem; font-family:Poppins;">
+                    <span>🔍</span>
+                    <span>Search metrics...</span>
+                </div>
+                <div style="position:relative; background:{BG_CARD}; border:1px solid {BORDER};
+                     width:34px; height:34px; border-radius:50%; display:flex;
+                     align-items:center; justify-content:center; cursor:pointer;">
+                    <span style="font-size:1.0rem;">🔔</span>
+                    {'<span style="position:absolute;top:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:'+RED+';font-size:0.55rem;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-family:Poppins;">'+str(active_alert_cnt_fresh)+'</span>' if active_alert_cnt_fresh > 0 else ''}
+                </div>
+                {pill(cond_label(cond_fresh), cc_fresh, font_size="0.72rem")}
+                <div style="display:flex; align-items:center; gap:8px;
+                     background:{BG_CARD}; padding:4px 14px 4px 5px;
+                     border-radius:22px; border:1px solid {BORDER};">
+                    <div style="width:28px;height:28px;border-radius:50%;
+                         background:{GREEN};display:flex;align-items:center;
+                         justify-content:center;font-size:0.7rem;font-weight:700;
+                         color:#fff;font-family:Poppins;">{initials}</div>
+                    <div>
+                        <div style="font-size:0.76rem;font-weight:600;
+                             color:{TEXT_PRIMARY};font-family:Poppins;line-height:1.2;">
+                            {curr_user.get('full_name','Operator')}</div>
+                        <div style="font-size:0.6rem;color:{TEXT_SUBTLE};
+                             font-family:Poppins;">{curr_role.title()}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        _render_current_page(df_fresh, latest_fresh, pred_fresh, cond_fresh, risk_fresh,
+                            rul_fresh, anomaly_fresh, conf_fresh, root_cause_fresh,
+                            action_data_fresh, cc_fresh, health_score_fresh,
+                            active_alert_cnt_fresh)
+
+    if hasattr(st, "fragment"):
+        @st.fragment(run_every=refresh_interval)
         def _fragment_view():
-            _render_current_page()
+            _render_live_view()
         _fragment_view()
     else:
-        _render_current_page()
-        if st.session_state.get("auto_refresh", True) and not hasattr(st, "fragment"):
-            time.sleep(2)
+        _render_live_view()
+        if refresh_interval:
+            time.sleep(refresh_interval)
             st.rerun()
 
 

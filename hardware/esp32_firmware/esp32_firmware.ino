@@ -584,9 +584,9 @@ void loop() {
 
     // Classify local machine condition
     String detected_condition = "Healthy";
-    if (vibration_g >= 0.20 || temp_c >= 60.0) {
+    if (vibration_g >= 0.20 || temp_c >= 40.0) {
       detected_condition = "Fault";
-    } else if (vibration_g >= 0.08 || temp_c >= 45.0) {
+    } else if (vibration_g >= 0.08 || temp_c >= 35.0) {
       detected_condition = "Warning";
     } else {
       detected_condition = "Healthy";

@@ -1,0 +1,151 @@
+--- a/hardware/esp32_firmware.ino
++++ b/hardware/esp32_firmware_l298n_proposed/esp32_firmware_l298n_proposed.ino
+@@ -2,10 +2,11 @@
+  * ==============================================================================
+  * HCL Mini Project - Predictive Maintenance for Rotating Machinery Using IoT Data
+  * Layer 6: ESP32 Microcontroller Firmware with Physical Sensors & Actuators
++ * PROPOSED REVISION: L298N Dual H-Bridge Motor Driver Integration (Planning Build)
+  * ==============================================================================
+  * 
+  * Hardware Target:
+- * - Classic ESP32 Development Board (ESP-WROOM-32 / ESP32-DevKitC)
++ * - Classic ESP32 Development Board (ESP-WROOM-32 / ESP32-DevKitC / DOIT DevKit V1)
+  * 
+  * Connected Sensors & Actuators:
+  * - MPU-6050 6-DOF IMU (Hardware I2C: SDA=GPIO 21, SCL=GPIO 22) -> Machinery Vibration (g RMS)
+@@ -15,7 +16,10 @@
+  * - Yellow Status LED (GPIO 19) -> Machine Warning Status (via 220 Ohm resistor)
+  * - Red Status LED (GPIO 23) -> Machine Fault / Critical Status (via 220 Ohm resistor)
+  * - 3-Pin Active Buzzer Module (Signal=GPIO 25, VCC=3.3V, GND=GND)
+- * - Motor Driver Control (Signal=GPIO 26, defaults OFF, safety interlock)
++ * - L298N Motor Driver Control (HW-095):
++ *   - ENA: GPIO 26 (Enable A / Speed Gate; defaults LOW, lockout active)
++ *   - IN1: GPIO 33 (Direction Phase A; defaults LOW, lockout active)
++ *   - IN2: GPIO 32 (Direction Phase B; defaults LOW, lockout active)
+  * 
+  * Protocol: MQTT over TLS (Port 8883) to HiveMQ Cloud
+  * Payload Schema: ISO Standard JSON matching Python layer3_storage & SQLite schema
+@@ -103,7 +107,11 @@
+ #define PIN_LED_YELLOW 19    // Warning Status LED
+ #define PIN_LED_RED    23    // Fault Status LED
+ #define PIN_BUZZER     25    // Active Buzzer module Signal pin
+-#define PIN_MOTOR_CTRL 26    // Motor Driver Control Signal pin (Low = OFF, High = ON)
++
++// L298N Dual H-Bridge Motor Driver Module Pin Assignments
++#define PIN_MOTOR_ENA  26    // L298N Channel A Enable / Speed Gate (Low = Bridge Disabled)
++#define PIN_MOTOR_IN1  33    // L298N Channel A Direction Phase 1 (Low = De-energized)
++#define PIN_MOTOR_IN2  32    // L298N Channel A Direction Phase 2 (Low = De-energized)
+ 
+ // -----------------------------------------------------------------------------
+ // Active Buzzer Configuration & Hardware Assumption
+@@ -262,7 +270,7 @@
+ }
+ 
+ // -----------------------------------------------------------------------------
+-// Hardware Actuator Control (LEDs, Active Buzzer, Motor Driver)
++// Hardware Actuator Control (LEDs, Active Buzzer, L298N Motor Driver)
+ // -----------------------------------------------------------------------------
+ void write_buzzer(bool state) {
+   if (BUZZER_ACTIVE_LEVEL == HIGH) {
+@@ -274,14 +282,17 @@
+ }
+ 
+ void write_motor(bool state) {
+-  // SENSOR-VERIFICATION BUILD HARDENING:
+-  // Motor energization is strictly blocked in this initial sensor-verification build.
++  // L298N INTEGRATION PLANNING LOCKOUT:
++  // Motor energization is strictly blocked in this build.
+   // Physical motor power must remain disconnected until sensor validation is complete.
+   if (state) {
+     state = false;
+     Serial.println("[SAFETY] Blocked motor energization: Disabled in sensor-verification build.");
+   }
+-  digitalWrite(PIN_MOTOR_CTRL, LOW);
++  // All three L298N control lines are driven strictly LOW
++  digitalWrite(PIN_MOTOR_ENA, LOW);
++  digitalWrite(PIN_MOTOR_IN1, LOW);
++  digitalWrite(PIN_MOTOR_IN2, LOW);
+   motor_running = false;
+ }
+ 
+@@ -312,7 +323,7 @@
+     digitalWrite(PIN_LED_RED, HIGH);
+     write_buzzer(true);
+     buzzer_active = true;
+-    write_motor(false); // Safety shutdown: Emergency motor stop on fault
++    write_motor(false); // Safety shutdown: Emergency motor stop on fault (ENA, IN1, IN2 -> LOW)
+   }
+ 
+   actuator_state = target_condition;
+@@ -365,7 +376,7 @@
+       set_actuators("Warning");
+     } else if (cmd == "MOTOR_STOP" || cmd == "EMERGENCY_STOP") {
+       write_motor(false);
+-      Serial.println("[ACTUATOR] Remote command: Motor STOPPED.");
++      Serial.println("[ACTUATOR] Remote command: Motor STOPPED (L298N ENA, IN1, IN2 forced LOW).");
+     } else if (cmd == "MOTOR_START") {
+       // SENSOR-VERIFICATION BUILD HARDENING:
+       // MOTOR_START is strictly disabled and rejected in this build.
+@@ -434,13 +445,20 @@
+ void setup() {
+   // ---------------------------------------------------------------------------
+   // IMMEDIATE HARDWARE SAFETY INITIALIZATION:
+-  // Drive buzzer and motor to safe OFF states immediately before any delays or UART overhead.
++  // Drive buzzer and L298N motor driver control lines to safe OFF states
++  // immediately before any delays or UART overhead.
+   // ---------------------------------------------------------------------------
+   pinMode(PIN_BUZZER, OUTPUT);
+   write_buzzer(false); // Silence buzzer immediately based on BUZZER_ACTIVE_LEVEL
+ 
+-  pinMode(PIN_MOTOR_CTRL, OUTPUT);
+-  write_motor(false);  // Ensure motor driver control is strictly 0V (OFF)
++  // Safe L298N output initialization: clamp latches to LOW then enable OUTPUT
++  digitalWrite(PIN_MOTOR_ENA, LOW);
++  digitalWrite(PIN_MOTOR_IN1, LOW);
++  digitalWrite(PIN_MOTOR_IN2, LOW);
++  pinMode(PIN_MOTOR_ENA, OUTPUT);
++  pinMode(PIN_MOTOR_IN1, OUTPUT);
++  pinMode(PIN_MOTOR_IN2, OUTPUT);
++  write_motor(false);  // Ensure all 3 lines are strictly 0V (OFF)
+ 
+   pinMode(PIN_LED_GREEN, OUTPUT);
+   pinMode(PIN_LED_YELLOW, OUTPUT);
+@@ -454,7 +472,7 @@
+ 
+   Serial.println("\n========================================================");
+   Serial.println(" HCL Rotating Machinery IoT Telemetry Node (ESP32)");
+-  Serial.println(" [SAFETY-HARDENED SENSOR-VERIFICATION BUILD]");
++  Serial.println(" [SAFETY-HARDENED L298N INTEGRATION PLANNING BUILD]");
+   Serial.println("========================================================");
+   Serial.println(" Pin Configuration:");
+   Serial.println("  - MPU6050:   SDA = GPIO " + String(I2C_SDA_PIN) + ", SCL = GPIO " + String(I2C_SCL_PIN));
+@@ -464,7 +482,9 @@
+   Serial.println("  - Yellow LED:GPIO " + String(PIN_LED_YELLOW));
+   Serial.println("  - Red LED:   GPIO " + String(PIN_LED_RED));
+   Serial.println("  - Buzzer:    GPIO " + String(PIN_BUZZER) + " (Active-LOW assumed)");
+-  Serial.println("  - Motor Ctrl:GPIO " + String(PIN_MOTOR_CTRL) + " (DISABLED in this build)");
++  Serial.println("  - L298N ENA: GPIO " + String(PIN_MOTOR_ENA) + " (DISABLED in this build)");
++  Serial.println("  - L298N IN1: GPIO " + String(PIN_MOTOR_IN1) + " (DISABLED in this build)");
++  Serial.println("  - L298N IN2: GPIO " + String(PIN_MOTOR_IN2) + " (DISABLED in this build)");
+   Serial.println("========================================================\n");
+ 
+   // Configure IR sensor input with pullup
+@@ -501,7 +521,7 @@
+ void loop() {
+   if (WiFi.status() == WL_CONNECTED) {
+     if (!mqttClient.connected()) {
+-      // Failsafe: Turn OFF motor if disconnected from MQTT
++      // Failsafe: Turn OFF motor if disconnected from MQTT (ENA, IN1, IN2 -> LOW)
+       if (motor_running) {
+         Serial.println("[SAFETY] MQTT disconnected. Motor safety shutdown triggered.");
+         write_motor(false);
+@@ -515,7 +535,7 @@
+       mqttClient.loop();
+     }
+   } else {
+-    // Failsafe: Turn OFF motor if WiFi is not connected
++    // Failsafe: Turn OFF motor if WiFi is not connected (ENA, IN1, IN2 -> LOW)
+     if (motor_running) {
+       Serial.println("[SAFETY] WiFi disconnected. Motor safety shutdown triggered.");
+       write_motor(false);
+
