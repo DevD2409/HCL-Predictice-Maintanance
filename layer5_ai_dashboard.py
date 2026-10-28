@@ -33,7 +33,7 @@ from ui.theme import (
     GLOBAL_CSS, PLOTLY_LAYOUT, BG_APP, BG_SIDEBAR, BG_CARD, BG_CARD_ALT,
     BG_INPUT, BORDER, BORDER_LIGHT, TEXT_PRIMARY, TEXT_HEADING, TEXT_MUTED,
     TEXT_SUBTLE, GREEN, GREEN_DIM, GREEN_GLOW, AMBER, AMBER_DIM, AMBER_GLOW,
-    RED, RED_DIM, RED_GLOW, BLUE, BLUE_DIM,
+    RED, RED_DIM, RED_GLOW, BLUE, BLUE_DIM, CYAN, CYAN_DIM, CYAN_GLOW,
     cond_color, cond_dim, cond_glow, cond_label, risk_color,
     card, pill, section_title, svg_health_ring, svg_sensor_rings,
     svg_anomaly_bar, svg_semicircle_gauge, gantt_bar,
@@ -84,17 +84,31 @@ def fetch_recent_data(limit=100):
 
 
 # ── Plotly chart builder ────────────────────────────────────────
-def _plotly_line(df, col, color, title="", dash=None, fill=None):
-    """Build a dark-themed Plotly line chart for a sensor column."""
+def _plotly_line(df, col, color, title="", dash=None, fill=None, hover_fmt=None):
+    """Build a dark-themed Plotly line chart for a sensor column with null safety."""
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df["timestamp"], y=df[col],
-        mode="lines",
-        line=dict(color=color, width=2, dash=dash or "solid"),
-        fill=fill,
-        fillcolor=f"rgba({_hex_rgb(color)},0.08)" if fill else None,
-        hovertemplate="%{y:.3f}<extra></extra>",
-    ))
+    if df is not None and not df.empty and col in df.columns:
+        df_clean = df.dropna(subset=[col, "timestamp"])
+    else:
+        df_clean = pd.DataFrame()
+
+    if not df_clean.empty:
+        fmt = hover_fmt or "%{y:.2f}"
+        fig.add_trace(go.Scatter(
+            x=df_clean["timestamp"], y=df_clean[col],
+            mode="lines",
+            line=dict(color=color, width=2, dash=dash or "solid"),
+            fill=fill,
+            fillcolor=f"rgba({_hex_rgb(color)},0.08)" if fill else None,
+            hovertemplate=f"{fmt}<extra></extra>",
+        ))
+    else:
+        fig.add_annotation(
+            text="No telemetry data recorded",
+            showarrow=False,
+            font=dict(color=TEXT_MUTED, size=12, family="Poppins"),
+            xref="paper", yref="paper", x=0.5, y=0.5
+        )
     layout = {**PLOTLY_LAYOUT, "height": 240}
     if title:
         layout["title"] = dict(text=title, font=dict(size=13, color=TEXT_PRIMARY))
@@ -443,8 +457,10 @@ def _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
                    conf, root_cause, action_data, cc, health_score,
                    active_alert_count, perms, user):
 
-    # ── Row 1: 3 metric cards ───────────────────────────────────
-    r1c1, r1c2, r1c3 = st.columns(3, gap="medium")
+    # ── Row 1: 4 metric cards (Risk, Vib, Humidity, Anomaly) ───────
+    r1c1, r1c2, r1c3, r1c4 = st.columns(4, gap="medium")
+
+    df_chron = df.sort_values("id", ascending=True) if not df.empty else df
 
     with r1c1:
         delta = risk - 25.0  # baseline comparison
@@ -471,53 +487,128 @@ def _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
 
     with r1c2:
         # Live vibration mini chart with latest point bubble
-        df_chron = df.sort_values("id", ascending=True)
         vib_val = latest.get("vibration_g", 0)
+        try:
+            vib_f = float(vib_val) if vib_val is not None and not (isinstance(vib_val, float) and math.isnan(vib_val)) else 0.0
+        except (ValueError, TypeError):
+            vib_f = 0.0
         st.markdown(card(
             f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
             f'<div>'
             f'<div style="font-size:0.72rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins,sans-serif;">Live Vibration</div>'
-            f'<div style="font-size:2.2rem;font-weight:800;color:{TEXT_HEADING};font-family:Poppins,sans-serif;margin-top:4px;letter-spacing:-0.02em;">{vib_val:.3f}g</div>'
+            f'<div style="font-size:2.2rem;font-weight:800;color:{TEXT_HEADING};font-family:Poppins,sans-serif;margin-top:4px;letter-spacing:-0.02em;">{vib_f:.3f}g</div>'
             f'</div>'
             f'{pill("● REALTIME", GREEN, font_size="0.65rem")}'
             f'</div>'
         ), unsafe_allow_html=True)
-        if len(df_chron) > 1:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_chron["timestamp"], y=df_chron["vibration_g"],
-                mode="lines", line=dict(color=GREEN, width=2.5, dash="dot"),
-                fill="tozeroy",
-                fillcolor="rgba(31,181,137,0.10)",
-                hovertemplate="%{y:.4f}g<extra></extra>",
-            ))
-            latest_x = df_chron["timestamp"].iloc[-1]
-            latest_y = df_chron["vibration_g"].iloc[-1]
-            fig.add_annotation(
-                x=latest_x, y=latest_y,
-                text=f"<b>{latest_y:.3f}g</b>",
-                showarrow=True,
-                arrowhead=0,
-                arrowcolor=GREEN,
-                ax=0, ay=-26,
-                bgcolor=GREEN,
-                bordercolor=GREEN,
-                borderwidth=1,
-                borderpad=4,
-                font=dict(color="#ffffff", size=10, family="Poppins"),
-            )
-            vib_layout = {
-                **PLOTLY_LAYOUT,
-                "height": 120,
-                "margin": dict(l=0, r=0, t=10, b=0),
-                "xaxis": dict(visible=False),
-                "yaxis": dict(visible=False),
-            }
-            fig.update_layout(**vib_layout)
-            st.plotly_chart(fig, use_container_width=True,
-                            config={"displayModeBar": False})
+        if len(df_chron) > 1 and "vibration_g" in df_chron.columns:
+            df_vib = df_chron.dropna(subset=["vibration_g", "timestamp"])
+            if len(df_vib) > 1:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=df_vib["timestamp"], y=df_vib["vibration_g"],
+                    mode="lines", line=dict(color=GREEN, width=2.5, dash="dot"),
+                    fill="tozeroy",
+                    fillcolor="rgba(31,181,137,0.10)",
+                    hovertemplate="%{y:.4f}g<extra></extra>",
+                ))
+                latest_x = df_vib["timestamp"].iloc[-1]
+                latest_y = df_vib["vibration_g"].iloc[-1]
+                fig.add_annotation(
+                    x=latest_x, y=latest_y,
+                    text=f"<b>{latest_y:.3f}g</b>",
+                    showarrow=True,
+                    arrowhead=0,
+                    arrowcolor=GREEN,
+                    ax=0, ay=-26,
+                    bgcolor=GREEN,
+                    bordercolor=GREEN,
+                    borderwidth=1,
+                    borderpad=4,
+                    font=dict(color="#ffffff", size=10, family="Poppins"),
+                )
+                vib_layout = {
+                    **PLOTLY_LAYOUT,
+                    "height": 120,
+                    "margin": dict(l=0, r=0, t=10, b=0),
+                    "xaxis": dict(visible=False),
+                    "yaxis": dict(visible=False),
+                }
+                fig.update_layout(**vib_layout)
+                st.plotly_chart(fig, use_container_width=True,
+                                config={"displayModeBar": False})
 
     with r1c3:
+        # Live humidity metric card with latest SQLite reading and sparkline / empty state
+        hum_raw = latest.get("humidity_percent")
+        has_humidity = (hum_raw is not None and not (isinstance(hum_raw, float) and math.isnan(hum_raw)))
+        if has_humidity:
+            try:
+                hum_f = float(hum_raw)
+                hum_card_html = (
+                    f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                    f'<div>'
+                    f'<div style="font-size:0.72rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins,sans-serif;">Live Humidity</div>'
+                    f'<div style="font-size:2.2rem;font-weight:800;color:{TEXT_HEADING};font-family:Poppins,sans-serif;margin-top:4px;letter-spacing:-0.02em;">{hum_f:.1f}<span style="font-size:1.1rem;font-weight:600;color:{TEXT_MUTED};">% RH</span></div>'
+                    f'</div>'
+                    f'{pill("● SENSOR", CYAN, font_size="0.65rem")}'
+                    f'</div>'
+                )
+            except (ValueError, TypeError):
+                has_humidity = False
+
+        if not has_humidity:
+            hum_card_html = (
+                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                f'<div>'
+                f'<div style="font-size:0.72rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins,sans-serif;">Live Humidity</div>'
+                f'<div style="font-size:1.8rem;font-weight:700;color:{TEXT_MUTED};font-family:Poppins,sans-serif;margin-top:4px;">No Data</div>'
+                f'<div style="font-size:0.68rem;color:{TEXT_SUBTLE};font-family:Poppins;margin-top:2px;">Awaiting DHT reading (% RH)</div>'
+                f'</div>'
+                f'{pill("○ UNAVAILABLE", TEXT_MUTED, font_size="0.65rem")}'
+                f'</div>'
+            )
+
+        st.markdown(card(hum_card_html), unsafe_allow_html=True)
+
+        if has_humidity and len(df_chron) > 1 and "humidity_percent" in df_chron.columns:
+            df_hum = df_chron.dropna(subset=["humidity_percent", "timestamp"])
+            if len(df_hum) > 1:
+                fig_hum = go.Figure()
+                fig_hum.add_trace(go.Scatter(
+                    x=df_hum["timestamp"], y=df_hum["humidity_percent"],
+                    mode="lines", line=dict(color=CYAN, width=2.5, dash="solid"),
+                    fill="tozeroy",
+                    fillcolor="rgba(56,189,248,0.10)",
+                    hovertemplate="%{y:.1f}% RH<extra></extra>",
+                ))
+                latest_hx = df_hum["timestamp"].iloc[-1]
+                latest_hy = df_hum["humidity_percent"].iloc[-1]
+                fig_hum.add_annotation(
+                    x=latest_hx, y=latest_hy,
+                    text=f"<b>{latest_hy:.1f}%</b>",
+                    showarrow=True,
+                    arrowhead=0,
+                    arrowcolor=CYAN,
+                    ax=0, ay=-26,
+                    bgcolor=CYAN,
+                    bordercolor=CYAN,
+                    borderwidth=1,
+                    borderpad=4,
+                    font=dict(color="#ffffff", size=10, family="Poppins"),
+                )
+                hum_layout = {
+                    **PLOTLY_LAYOUT,
+                    "height": 120,
+                    "margin": dict(l=0, r=0, t=10, b=0),
+                    "xaxis": dict(visible=False),
+                    "yaxis": dict(visible=False),
+                }
+                fig_hum.update_layout(**hum_layout)
+                st.plotly_chart(fig_hum, use_container_width=True,
+                                config={"displayModeBar": False})
+
+    with r1c4:
         # Anomaly score bar with zones
         st.markdown(card(
             f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">'
@@ -535,14 +626,14 @@ def _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
     r2c1, r2c2, r2c3 = st.columns(3, gap="medium")
 
     with r2c1:
-        # Temperature & Load bar chart with metric selector
-        sel_col1, sel_col2 = st.columns([1.6, 1.4])
+        # Temperature & Load bar chart with 5-metric selector
+        sel_col1, sel_col2 = st.columns([1.4, 1.6])
         with sel_col1:
             st.markdown(f'<div style="font-size:0.72rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins;padding-top:6px;">Metrics History</div>', unsafe_allow_html=True)
         with sel_col2:
             metric_choice = st.selectbox(
                 "Metric",
-                ["Temperature (°C)", "Load (%)", "RPM"],
+                ["Temperature (°C)", "Humidity (% RH)", "Vibration (g)", "Load (%)", "RPM"],
                 index=0,
                 key="r2_metric_selector",
                 label_visibility="collapsed"
@@ -550,46 +641,54 @@ def _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
 
         if "Temp" in metric_choice:
             col_name, unit, bar_color = "temperature_c", "°C", GREEN
+        elif "Humidity" in metric_choice:
+            col_name, unit, bar_color = "humidity_percent", "% RH", CYAN
+        elif "Vib" in metric_choice:
+            col_name, unit, bar_color = "vibration_g", "g", AMBER
         elif "Load" in metric_choice:
             col_name, unit, bar_color = "load_percent", "%", BLUE
         else:
-            col_name, unit, bar_color = "rpm", " RPM", AMBER
+            col_name, unit, bar_color = "rpm", " RPM", RED
 
-        df_bar = df.sort_values("id", ascending=True).tail(12)
-        if len(df_bar) > 0:
-            fig = go.Figure()
-            n_bars = len(df_bar)
-            colors = [f"rgba(138,143,156,0.28)"] * (n_bars - 1) + [bar_color]
-            pattern_shapes = ["/"] * (n_bars - 1) + [""]
-            fig.add_trace(go.Bar(
-                x=df_bar["timestamp"],
-                y=df_bar[col_name],
-                marker=dict(color=colors, pattern=dict(shape=pattern_shapes), line=dict(color=BORDER, width=1)),
-                hovertemplate=f"%{{y:.1f}}{unit}<extra></extra>",
-            ))
-            latest_val = df_bar[col_name].iloc[-1]
-            fig.add_annotation(
-                x=df_bar["timestamp"].iloc[-1], y=latest_val,
-                text=f"<b>{latest_val:.1f}{unit}</b>",
-                showarrow=True,
-                arrowhead=0,
-                arrowcolor=bar_color,
-                ax=0, ay=-22,
-                bgcolor=bar_color,
-                bordercolor=bar_color,
-                borderpad=4,
-                font=dict(color="#ffffff", size=10, family="Poppins"),
-            )
-            bar_layout = {
-                **PLOTLY_LAYOUT,
-                "height": 210,
-                "margin": dict(l=30, r=10, t=18, b=24),
-                "showlegend": False,
-                "xaxis": dict(visible=False),
-            }
-            fig.update_layout(**bar_layout)
-            st.plotly_chart(fig, use_container_width=True,
-                            config={"displayModeBar": False})
+        df_bar = df.sort_values("id", ascending=True).tail(12) if not df.empty else df
+        if len(df_bar) > 0 and col_name in df_bar.columns:
+            df_bar_clean = df_bar.dropna(subset=[col_name, "timestamp"])
+            if not df_bar_clean.empty:
+                fig = go.Figure()
+                n_bars = len(df_bar_clean)
+                colors = [f"rgba(138,143,156,0.28)"] * (n_bars - 1) + [bar_color]
+                pattern_shapes = ["/"] * (n_bars - 1) + [""]
+                fig.add_trace(go.Bar(
+                    x=df_bar_clean["timestamp"],
+                    y=df_bar_clean[col_name],
+                    marker=dict(color=colors, pattern=dict(shape=pattern_shapes), line=dict(color=BORDER, width=1)),
+                    hovertemplate=f"%{{y:.1f}}{unit}<extra></extra>",
+                ))
+                latest_val = df_bar_clean[col_name].iloc[-1]
+                fig.add_annotation(
+                    x=df_bar_clean["timestamp"].iloc[-1], y=latest_val,
+                    text=f"<b>{latest_val:.1f}{unit}</b>",
+                    showarrow=True,
+                    arrowhead=0,
+                    arrowcolor=bar_color,
+                    ax=0, ay=-22,
+                    bgcolor=bar_color,
+                    bordercolor=bar_color,
+                    borderpad=4,
+                    font=dict(color="#ffffff", size=10, family="Poppins"),
+                )
+                bar_layout = {
+                    **PLOTLY_LAYOUT,
+                    "height": 210,
+                    "margin": dict(l=30, r=10, t=18, b=24),
+                    "showlegend": False,
+                    "xaxis": dict(visible=False),
+                }
+                fig.update_layout(**bar_layout)
+                st.plotly_chart(fig, use_container_width=True,
+                                config={"displayModeBar": False})
+            else:
+                st.markdown(f'<div style="text-align:center;padding:40px 0;color:{TEXT_MUTED};font-size:0.8rem;font-family:Poppins;">No historical data for {metric_choice}</div>', unsafe_allow_html=True)
 
     with r2c2:
         # Segmented/tick-mark health gauge with soft glow
@@ -604,29 +703,63 @@ def _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
         ), unsafe_allow_html=True)
 
     with r2c3:
-        # Concentric sensor rings + recent alerts preview
+        # Concentric sensor rings (5 metrics) + Incident Log preview
         temp_val = latest.get("temperature_c", 0)
+        hum_raw = latest.get("humidity_percent")
         vib_val = latest.get("vibration_g", 0)
         load_val = latest.get("load_percent", 0)
         rpm_val = latest.get("rpm", 0)
 
+        try:
+            temp_f = float(temp_val) if temp_val is not None and not (isinstance(temp_val, float) and math.isnan(temp_val)) else 0.0
+        except (ValueError, TypeError):
+            temp_f = 0.0
+        try:
+            vib_f = float(vib_val) if vib_val is not None and not (isinstance(vib_val, float) and math.isnan(vib_val)) else 0.0
+        except (ValueError, TypeError):
+            vib_f = 0.0
+        try:
+            load_f = float(load_val) if load_val is not None and not (isinstance(load_val, float) and math.isnan(load_val)) else 0.0
+        except (ValueError, TypeError):
+            load_f = 0.0
+        try:
+            rpm_f = float(rpm_val) if rpm_val is not None and not (isinstance(rpm_val, float) and math.isnan(rpm_val)) else 0.0
+        except (ValueError, TypeError):
+            rpm_f = 0.0
+
+        has_hum = hum_raw is not None and not (isinstance(hum_raw, float) and math.isnan(hum_raw))
+        if has_hum:
+            try:
+                hum_f = float(hum_raw)
+                hum_str = f"<b>{hum_f:.1f}% RH</b>"
+                hum_ring_val = hum_f
+            except (ValueError, TypeError):
+                has_hum = False
+                hum_str = f'<span style="color:{TEXT_MUTED};">N/A</span>'
+                hum_ring_val = 0.0
+        else:
+            hum_str = f'<span style="color:{TEXT_MUTED};">N/A</span>'
+            hum_ring_val = 0.0
+
         rings_svg = svg_sensor_rings([
-            ("Temp", temp_val, 95.0, AMBER),
-            ("Vib", vib_val, 0.5, GREEN),
-            ("Load", load_val, 100.0, BLUE),
-            ("RPM", rpm_val, 1600.0, RED),
+            ("Temp", temp_f, 95.0, AMBER),
+            ("Humidity", hum_ring_val, 100.0, CYAN),
+            ("Vib", vib_f, 0.5, GREEN),
+            ("Load", load_f, 100.0, BLUE),
+            ("RPM", rpm_f, 1600.0, RED),
         ], 130, center_text=cond[:4].upper(), center_color=cc)
 
         st.markdown(card(
-            f'<div style="display:flex;align-items:center;gap:16px;">'
+            f'<div style="display:flex;align-items:center;gap:14px;">'
             f'<div>{rings_svg}</div>'
             f'<div style="flex:1;">'
-            f'<div style="font-size:0.70rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins,sans-serif;margin-bottom:6px;">Sensor Load (% Limit)</div>'
-            f'<div style="font-size:0.75rem;color:{TEXT_PRIMARY};font-family:Poppins,sans-serif;line-height:1.9;">'
-            f'<span style="color:{AMBER};">●</span> Temp: <b>{temp_val:.1f}°C</b> ({min(100, temp_val/95.0*100):.0f}%)<br>'
-            f'<span style="color:{GREEN};">●</span> Vib: <b>{vib_val:.3f}g</b> ({min(100, vib_val/0.5*100):.0f}%)<br>'
-            f'<span style="color:{BLUE};">●</span> Load: <b>{load_val:.0f}%</b><br>'
-            f'<span style="color:{RED};">●</span> RPM: <b>{rpm_val}</b> ({min(100, rpm_val/1600.0*100):.0f}%)'
+            f'<div style="font-size:0.70rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins,sans-serif;margin-bottom:4px;">5-Sensor Load (% Limit)</div>'
+            f'<div style="font-size:0.72rem;color:{TEXT_PRIMARY};font-family:Poppins,sans-serif;line-height:1.75;">'
+            f'<span style="color:{AMBER};">●</span> Temp: <b>{temp_f:.1f}°C</b> ({min(100, temp_f/95.0*100):.0f}%)<br>'
+            f'<span style="color:{CYAN};">●</span> Humidity: {hum_str}<br>'
+            f'<span style="color:{GREEN};">●</span> Vib: <b>{vib_f:.3f}g</b> ({min(100, vib_f/0.5*100):.0f}%)<br>'
+            f'<span style="color:{BLUE};">●</span> Load: <b>{load_f:.0f}%</b><br>'
+            f'<span style="color:{RED};">●</span> RPM: <b>{rpm_f:.0f}</b> ({min(100, rpm_f/1600.0*100):.0f}%)'
             f'</div></div></div>'
         ), unsafe_allow_html=True)
 
@@ -634,24 +767,29 @@ def _page_overview(df, latest, prediction, cond, risk, rul, anomaly,
         if recent_alerts:
             alert_rows = ""
             for i, a in enumerate(recent_alerts):
-                sc = RED if a["severity"] == "CRITICAL" else AMBER
+                sc = RED if a.get("severity") == "CRITICAL" else AMBER
                 highlight = f"background:{BG_CARD_ALT};border:1px solid {BORDER_LIGHT};" if i == 0 else "border:1px solid transparent;"
+                ts = a.get("timestamp", "")
+                ts_short = ts.split("T")[-1] if "T" in ts else (ts.split(" ")[-1] if " " in ts else ts)
                 alert_rows += (
-                    f'<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:12px;margin-bottom:4px;{highlight}">'
-                    f'<div style="width:26px;height:26px;border-radius:50%;background:rgba({_hex_rgb(sc)},0.15);display:flex;align-items:center;justify-content:center;font-size:0.72rem;flex-shrink:0;">{"🔴" if a["severity"]=="CRITICAL" else "🟡"}</div>'
+                    f'<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;margin-bottom:4px;{highlight}">'
+                    f'<div style="width:24px;height:24px;border-radius:50%;background:rgba({_hex_rgb(sc)},0.15);display:flex;align-items:center;justify-content:center;font-size:0.7rem;flex-shrink:0;">{"🔴" if a.get("severity")=="CRITICAL" else "🟡"}</div>'
                     f'<div style="flex:1;min-width:0;">'
-                    f'<div style="font-size:0.72rem;font-weight:600;color:{TEXT_PRIMARY};font-family:Poppins;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{a.get("root_cause","Alert")[:36]}</div>'
-                    f'<div style="font-size:0.62rem;color:{TEXT_SUBTLE};font-family:Poppins;">{a.get("machine_id","MOTOR_01")} · {a.get("status","ACTIVE")}</div></div>'
-                    f'<span style="color:{TEXT_MUTED};font-size:0.8rem;cursor:pointer;">•••</span>'
+                    f'<div style="font-size:0.70rem;font-weight:600;color:{TEXT_PRIMARY};font-family:Poppins;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{a.get("root_cause","Alert")[:34]}</div>'
+                    f'<div style="font-size:0.60rem;color:{TEXT_SUBTLE};font-family:Poppins;">#{a.get("id","")} · Logged: {ts_short} · {a.get("status","ACTIVE")}</div></div>'
+                    f'<span style="color:{TEXT_MUTED};font-size:0.75rem;">•••</span>'
                     f'</div>'
                 )
+            status_tag = f'<span style="font-size:0.62rem;color:{GREEN};font-weight:600;">● Live: {cond}</span>' if cond == "Healthy" else f'<span style="font-size:0.62rem;color:{RED};font-weight:600;">● Active Anomaly</span>'
+            note_html = f'<div style="font-size:0.60rem;color:{TEXT_MUTED};font-style:italic;margin-top:6px;font-family:Poppins;">Past incident log; current machine condition is {cond}.</div>' if cond == "Healthy" else ''
             st.markdown(f"""
             <div style="background:{BG_CARD};border:1px solid {BORDER};border-radius:18px;padding:12px 14px;margin-bottom:14px;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                    <span style="font-size:0.68rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins;">Recent Alerts</span>
-                    <span style="font-size:0.65rem;color:{GREEN};font-weight:600;cursor:pointer;">Live Feed</span>
+                    <span style="font-size:0.68rem;color:{TEXT_MUTED};text-transform:uppercase;letter-spacing:0.06em;font-family:Poppins;">Incident Log</span>
+                    {status_tag}
                 </div>
                 {alert_rows}
+                {note_html}
             </div>
             """, unsafe_allow_html=True)
 
@@ -783,8 +921,9 @@ def _page_trends(df):
                               "Live rolling history from ESP32 telemetry"),
                 unsafe_allow_html=True)
 
-    df_chron = df.sort_values("id", ascending=True)
+    df_chron = df.sort_values("id", ascending=True) if not df.empty else df
 
+    # Row 1: Temperature & Humidity
     tc1, tc2 = st.columns(2, gap="medium")
     with tc1:
         st.markdown(card(
@@ -792,41 +931,116 @@ def _page_trends(df):
             f'text-transform:uppercase;font-family:Poppins;margin-bottom:4px;">'
             f'🔥 Temperature (°C)</div>'
         ), unsafe_allow_html=True)
-        fig = _plotly_line(df_chron, "temperature_c", AMBER, "")
+        fig = _plotly_line(df_chron, "temperature_c", AMBER, "", hover_fmt="%{y:.1f}°C")
         st.plotly_chart(fig, use_container_width=True,
                         config={"displayModeBar": False})
 
     with tc2:
+        st.markdown(card(
+            f'<div style="font-size:0.72rem;font-weight:600;color:{CYAN};'
+            f'text-transform:uppercase;font-family:Poppins;margin-bottom:4px;">'
+            f'💧 Humidity (% RH)</div>'
+        ), unsafe_allow_html=True)
+        fig = _plotly_line(df_chron, "humidity_percent", CYAN, "", hover_fmt="%{y:.1f}% RH")
+        st.plotly_chart(fig, use_container_width=True,
+                        config={"displayModeBar": False})
+
+    # Row 2: Vibration & RPM
+    tc3, tc4 = st.columns(2, gap="medium")
+    with tc3:
         st.markdown(card(
             f'<div style="font-size:0.72rem;font-weight:600;color:{GREEN};'
             f'text-transform:uppercase;font-family:Poppins;margin-bottom:4px;">'
             f'⚡ Vibration (g RMS)</div>'
         ), unsafe_allow_html=True)
         fig = _plotly_line(df_chron, "vibration_g", GREEN, "",
-                           dash="dot", fill="tozeroy")
-        st.plotly_chart(fig, use_container_width=True,
-                        config={"displayModeBar": False})
-
-    tc3, tc4 = st.columns(2, gap="medium")
-    with tc3:
-        st.markdown(card(
-            f'<div style="font-size:0.72rem;font-weight:600;color:{BLUE};'
-            f'text-transform:uppercase;font-family:Poppins;margin-bottom:4px;">'
-            f'🔄 RPM</div>'
-        ), unsafe_allow_html=True)
-        fig = _plotly_line(df_chron, "rpm", BLUE, "")
+                           dash="dot", fill="tozeroy", hover_fmt="%{y:.3f}g")
         st.plotly_chart(fig, use_container_width=True,
                         config={"displayModeBar": False})
 
     with tc4:
         st.markdown(card(
-            f'<div style="font-size:0.72rem;font-weight:600;color:{RED};'
+            f'<div style="font-size:0.72rem;font-weight:600;color:{BLUE};'
             f'text-transform:uppercase;font-family:Poppins;margin-bottom:4px;">'
-            f'📊 Load (%)</div>'
+            f'🔄 RPM</div>'
         ), unsafe_allow_html=True)
-        fig = _plotly_line(df_chron, "load_percent", RED, "")
+        fig = _plotly_line(df_chron, "rpm", BLUE, "", hover_fmt="%{y:.0f} RPM")
         st.plotly_chart(fig, use_container_width=True,
                         config={"displayModeBar": False})
+
+    # Row 3: Load (%) & 5-Sensor Telemetry Summary Card
+    tc5, tc6 = st.columns(2, gap="medium")
+    with tc5:
+        st.markdown(card(
+            f'<div style="font-size:0.72rem;font-weight:600;color:{RED};'
+            f'text-transform:uppercase;font-family:Poppins;margin-bottom:4px;">'
+            f'📊 Dynamic Load (%)</div>'
+        ), unsafe_allow_html=True)
+        fig = _plotly_line(df_chron, "load_percent", RED, "", hover_fmt="%{y:.1f}%")
+        st.plotly_chart(fig, use_container_width=True,
+                        config={"displayModeBar": False})
+
+    with tc6:
+        if not df_chron.empty:
+            l_row = df_chron.iloc[-1]
+            t_val = l_row.get("temperature_c")
+            h_val = l_row.get("humidity_percent")
+            v_val = l_row.get("vibration_g")
+            r_val = l_row.get("rpm")
+            ld_val = l_row.get("load_percent")
+
+            t_avg = df_chron["temperature_c"].mean() if "temperature_c" in df_chron.columns else 0.0
+            t_max = df_chron["temperature_c"].max() if "temperature_c" in df_chron.columns else 0.0
+
+            has_h = "humidity_percent" in df_chron.columns and not df_chron["humidity_percent"].dropna().empty
+            if has_h:
+                h_avg = df_chron["humidity_percent"].mean()
+                h_max = df_chron["humidity_percent"].max()
+                h_last_str = f"{float(h_val):.1f}% RH" if h_val is not None and not pd.isna(h_val) else "N/A"
+                h_sub = f"Avg: {h_avg:.1f}% · Max: {h_max:.1f}%"
+            else:
+                h_last_str = "N/A"
+                h_sub = "Sensor offline or awaiting DHT"
+
+            v_avg = df_chron["vibration_g"].mean() if "vibration_g" in df_chron.columns else 0.0
+            v_max = df_chron["vibration_g"].max() if "vibration_g" in df_chron.columns else 0.0
+
+            r_val_f = float(r_val) if r_val is not None and not pd.isna(r_val) else 0.0
+            ld_val_f = float(ld_val) if ld_val is not None and not pd.isna(ld_val) else 0.0
+            t_val_f = float(t_val) if t_val is not None and not pd.isna(t_val) else 0.0
+            v_val_f = float(v_val) if v_val is not None and not pd.isna(v_val) else 0.0
+        else:
+            t_val_f, v_val_f, r_val_f, ld_val_f = 0.0, 0.0, 0.0, 0.0
+            t_avg, t_max, v_avg, v_max = 0.0, 0.0, 0.0, 0.0
+            h_last_str, h_sub = "N/A", "No records"
+
+        st.markdown(card(
+            f'<div style="font-size:0.72rem;font-weight:600;color:{TEXT_MUTED};'
+            f'text-transform:uppercase;font-family:Poppins;margin-bottom:12px;">'
+            f'📋 5-Sensor Telemetry Summary</div>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-family:Poppins;">'
+            f'<div style="background:{BG_CARD_ALT};padding:12px 14px;border-radius:14px;border:1px solid {BORDER_LIGHT};">'
+            f'<div style="font-size:0.65rem;color:{TEXT_MUTED};text-transform:uppercase;">Temperature</div>'
+            f'<div style="font-size:1.15rem;font-weight:700;color:{AMBER};margin-top:2px;">{t_val_f:.1f} °C</div>'
+            f'<div style="font-size:0.62rem;color:{TEXT_SUBTLE};margin-top:2px;">Avg: {t_avg:.1f}°C · Max: {t_max:.1f}°C</div>'
+            f'</div>'
+            f'<div style="background:{BG_CARD_ALT};padding:12px 14px;border-radius:14px;border:1px solid {BORDER_LIGHT};">'
+            f'<div style="font-size:0.65rem;color:{TEXT_MUTED};text-transform:uppercase;">Humidity</div>'
+            f'<div style="font-size:1.15rem;font-weight:700;color:{CYAN};margin-top:2px;">{h_last_str}</div>'
+            f'<div style="font-size:0.62rem;color:{TEXT_SUBTLE};margin-top:2px;">{h_sub}</div>'
+            f'</div>'
+            f'<div style="background:{BG_CARD_ALT};padding:12px 14px;border-radius:14px;border:1px solid {BORDER_LIGHT};">'
+            f'<div style="font-size:0.65rem;color:{TEXT_MUTED};text-transform:uppercase;">Vibration</div>'
+            f'<div style="font-size:1.15rem;font-weight:700;color:{GREEN};margin-top:2px;">{v_val_f:.3f} g</div>'
+            f'<div style="font-size:0.62rem;color:{TEXT_SUBTLE};margin-top:2px;">Avg: {v_avg:.3f}g · Max: {v_max:.3f}g</div>'
+            f'</div>'
+            f'<div style="background:{BG_CARD_ALT};padding:12px 14px;border-radius:14px;border:1px solid {BORDER_LIGHT};">'
+            f'<div style="font-size:0.65rem;color:{TEXT_MUTED};text-transform:uppercase;">Speed & Load</div>'
+            f'<div style="font-size:1.15rem;font-weight:700;color:{BLUE};margin-top:2px;">{r_val_f:.0f} RPM</div>'
+            f'<div style="font-size:0.62rem;color:{TEXT_SUBTLE};margin-top:2px;">Dynamic Load: {ld_val_f:.0f}%</div>'
+            f'</div>'
+            f'</div>'
+        ), unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════

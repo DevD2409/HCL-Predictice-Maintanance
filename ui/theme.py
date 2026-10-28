@@ -32,6 +32,9 @@ RED_DIM      = "rgba(240,85,63,0.12)"
 RED_GLOW     = "rgba(240,85,63,0.35)"
 BLUE         = "#2D6BFF"   # secondary / info
 BLUE_DIM     = "rgba(45,107,255,0.12)"
+CYAN         = "#38BDF8"   # humidity / environmental
+CYAN_DIM     = "rgba(56,189,248,0.12)"
+CYAN_GLOW    = "rgba(56,189,248,0.35)"
 
 # ── Semantic helpers ─────────────────────────────────────────────
 def cond_color(cond: str) -> str:
@@ -325,28 +328,35 @@ def svg_sensor_rings(values: list[tuple[str, float, float, str]], size: int = 14
     """Concentric donut rings for sensor load fractions with center status badge."""
     cx, cy = size // 2, size // 2
     rings = ""
-    radii = [52, 42, 32, 22]
-    for i, (label, val, mx, color) in enumerate(values[:4]):
+    radii = [56, 47, 38, 29, 20] if len(values) >= 5 else [52, 42, 32, 22]
+    stroke_w = "4" if len(values) >= 5 else "5"
+    for i, (label, val, mx, color) in enumerate(values[:len(radii)]):
         r = radii[i]
         circ = 2 * math.pi * r
-        frac = min(1.0, max(0.0, val / mx)) if mx > 0 else 0
+        try:
+            val_f = float(val) if val is not None and not (isinstance(val, float) and math.isnan(val)) else 0.0
+        except (ValueError, TypeError):
+            val_f = 0.0
+        frac = min(1.0, max(0.0, val_f / mx)) if mx > 0 else 0
         offset = circ * (1 - frac)
         rings += (
             f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none"'
-            f' stroke="{BORDER}" stroke-width="5" opacity="0.45"/>'
+            f' stroke="{BORDER}" stroke-width="{stroke_w}" opacity="0.45"/>'
             f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none"'
-            f' stroke="{color}" stroke-width="5" stroke-linecap="round"'
+            f' stroke="{color}" stroke-width="{stroke_w}" stroke-linecap="round"'
             f' stroke-dasharray="{circ:.2f}"'
             f' stroke-dashoffset="{offset:.2f}"'
             f' transform="rotate(-90 {cx} {cy})"'
             f' style="animation: ring-fill 1s ease-out;"/>'
         )
+    center_r = 13 if len(values) >= 5 else 15
     center_elem = (
-        f'<circle cx="{cx}" cy="{cy}" r="15" fill="{BG_CARD_ALT}"/>'
+        f'<circle cx="{cx}" cy="{cy}" r="{center_r}" fill="{BG_CARD_ALT}"/>'
         f'<text x="{cx}" y="{cy + 3}" text-anchor="middle" fill="{center_color}"'
         f' font-size="8" font-weight="700" font-family="Poppins">{center_text}</text>'
     )
     return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">{rings}{center_elem}</svg>'
+
 
 # ── SVG: Anomaly progress bar ────────────────────────────────────
 def svg_anomaly_bar(score: float, width: int = 320, height: int = 24) -> str:
